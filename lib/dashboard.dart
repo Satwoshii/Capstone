@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 // Import the QR scanning screen for navigation
 import 'qr_scan.dart';
+import 'report_page.dart';
 
 // Dashboard is the main screen of the application after logging in.
 // --- FRONTEND DESIGN NOTE ---
@@ -31,16 +32,17 @@ class Dashboard extends StatelessWidget {
 
             // Navigation Links
             ListTile(
-              leading: Icon(Icons.contact_support),
-              title: Text("Contact ITSO"),
+              leading: const Icon(Icons.support_agent),
+              title: const Text("Contact ITSO"),
               onTap: () {
-                showDialog(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                    title: Text("Contact ITSO"),
-                    content: Text("Email: itso@school.edu"),
+
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ReportPage(),
                   ),
                 );
+
               },
             ),
 
