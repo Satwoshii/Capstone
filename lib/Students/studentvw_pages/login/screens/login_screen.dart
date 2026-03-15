@@ -5,6 +5,7 @@ import '../services/auth_service.dart';
 import '../services/jwt_service.dart';
 import 'dashboard_screen.dart';
 import 'register_screen.dart';
+import '../../dashboardweb.dart';
 
 class LoginScreen extends StatefulWidget {
 
@@ -37,7 +38,7 @@ class _LoginScreenState extends State<LoginScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-            builder: (_) => DashboardScreen()),
+            builder: (_) => DashboardPage()),
       );
 
     } else {
