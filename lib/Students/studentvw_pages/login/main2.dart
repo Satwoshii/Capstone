@@ -16,10 +16,10 @@ void main() async {
     ),
   );
 
-  runApp(MyApp());
+  runApp(Webstudent());
 }
 
-class MyApp extends StatelessWidget {
+class Webstudent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {

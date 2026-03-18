@@ -5,11 +5,11 @@ import 'dashboard.dart';
 
 // The main entry point of the Flutter application
 void main() {
-  runApp(MyApp());
+  runApp(Appstudent());
 }
 
 // MyApp is the root widget of the application
-class MyApp extends StatelessWidget {
+class Appstudent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
