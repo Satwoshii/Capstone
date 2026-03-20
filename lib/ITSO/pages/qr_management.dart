@@ -74,7 +74,7 @@ class _QrManagementPageState extends State<QrManagementPage> {
 
     final uniqueCode = _generateUniqueCode(lab, pc);
 
-    final url = "https://itso-view.web.app/scan?code=$uniqueCode";
+    final url = "https://test-1fc5d.web.app/scan?code=$uniqueCode";
 
     setState(() {
       _uniqueCode = uniqueCode;

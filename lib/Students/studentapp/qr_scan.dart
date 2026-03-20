@@ -25,7 +25,7 @@ class _QRScannerState extends State<QRScanner> {
       Uri uri = Uri.parse(qrData);
 
       /// Only accept QR from your system
-      if (uri.host != "itso-view.web.app") {
+      if (uri.host != "test-1fc5d.web.app") {
         return null;
       }
 
