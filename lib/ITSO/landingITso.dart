@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+
 import 'app_state.dart';
 import 'services/auth_repository.dart';
 import 'services/rooms_repository_web.dart';
+import 'services/auth_service.dart';
 
-import 'pages/login.dart';
+import 'pages/login/screens/splash_screen.dart';
+import 'pages/login/screens/login_screen.dart';
 import 'pages/pcManagement.dart';
 import 'pages/reportLog.dart';
 import 'pages/qr_management.dart';
-import 'pages/teacher_home.dart';
-import 'pages/student_home.dart';
-
 import 'widgets/itso_drawer.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
 
   final appState = AppState(
     auth: MockAuthRepository(),
@@ -35,46 +35,15 @@ class MyApp extends StatelessWidget {
     return AppStateScope(
       appState: appState,
       child: MaterialApp(
-        title: 'ITSO View',
         debugShowCheckedModeBanner: false,
-
+        title: 'Capstone System',
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
           useMaterial3: true,
         ),
-
-        home: const _Gate(),
+        home: const SplashScreen(),
       ),
     );
-  }
-}
-
-class _Gate extends StatelessWidget {
-  const _Gate();
-
-  @override
-  Widget build(BuildContext context) {
-
-    final app = AppStateScope.of(context);
-    final user = app.user;
-
-    if (user == null) {
-      return const LoginPage();
-    }
-
-    if (user.isItso) {
-      return const LandingITSO();
-    }
-
-    if (user.isTeacher) {
-      return const TeacherHomePage();
-    }
-
-    if (user.isStudent) {
-      return const StudentHomePage();
-    }
-
-    return const LoginPage();
   }
 }
 
@@ -83,35 +52,31 @@ class LandingITSO extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     final key = GlobalKey<ScaffoldState>();
     final color = Theme.of(context).colorScheme;
-    final app = AppStateScope.of(context);
 
     return Scaffold(
       key: key,
       drawer: const ItsoDrawer(),
-
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.menu, color: Colors.white),
           onPressed: () => key.currentState?.openDrawer(),
         ),
-
         backgroundColor: color.primary,
-        title: const Text("ITSO View", style: TextStyle(color: Colors.white)),
-
+        title: const Text(
+          "ITSO View",
+          style: TextStyle(color: Colors.white),
+        ),
         actions: [
-
           TextButton(
             onPressed: () async {
-
-              await app.signOut();
+              await AuthService().logout();
 
               if (!context.mounted) return;
 
               Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const LoginPage()),
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
                     (route) => false,
               );
             },
@@ -120,54 +85,41 @@ class LandingITSO extends StatelessWidget {
               style: TextStyle(color: Colors.white),
             ),
           )
-
         ],
       ),
-
       body: Padding(
         padding: const EdgeInsets.all(24),
-
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-
+        child: Wrap(
+          spacing: 24,
+          runSpacing: 24,
           children: [
-
             _FeatureCard(
               title: "Report Log",
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const ReportLogPage(),
-                  ),
+                  MaterialPageRoute(builder: (_) => const ReportLogPage()),
                 );
               },
             ),
-
             _FeatureCard(
               title: "QR Management",
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const QrManagementPage(),
-                  ),
+                  MaterialPageRoute(builder: (_) => const QrManagementPage()),
                 );
               },
             ),
-
             _FeatureCard(
               title: "PC Management",
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const PcManagementPage(),
-                  ),
+                  MaterialPageRoute(builder: (_) => const PcManagementPage()),
                 );
               },
             ),
-
           ],
         ),
       ),
@@ -176,7 +128,6 @@ class LandingITSO extends StatelessWidget {
 }
 
 class _FeatureCard extends StatelessWidget {
-
   final String title;
   final VoidCallback onTap;
 
@@ -188,24 +139,19 @@ class _FeatureCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     return InkWell(
       onTap: onTap,
-
       child: Container(
         width: 260,
         height: 120,
         padding: const EdgeInsets.all(16),
-
         decoration: BoxDecoration(
           color: Colors.amber.shade50,
           border: Border.all(color: Colors.amber.shade200),
           borderRadius: BorderRadius.circular(10),
         ),
-
         child: Row(
           children: [
-
             Container(
               width: 40,
               height: 40,
@@ -215,9 +161,7 @@ class _FeatureCard extends StatelessWidget {
               ),
               child: const Icon(Icons.computer),
             ),
-
             const SizedBox(width: 12),
-
             Expanded(
               child: Text(
                 title,
@@ -227,7 +171,6 @@ class _FeatureCard extends StatelessWidget {
                     ?.copyWith(fontWeight: FontWeight.w600),
               ),
             ),
-
           ],
         ),
       ),

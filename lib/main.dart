@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 
 // ITSO
 import 'ITSO/landingITso.dart';
+import 'ITSO/app_state.dart';
+import 'ITSO/services/auth_repository.dart';
+import 'ITSO/services/rooms_repository_web.dart';
 
 // Mobile
 import 'Students/studentapp/mainapp.dart';
@@ -12,65 +16,74 @@ import 'Students/studentvw_pages/login/main2.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize Firebase here so it's available for the whole app
+  usePathUrlStrategy();
+
   await Firebase.initializeApp(
     options: const FirebaseOptions(
-      apiKey: "AIzaSyCR9Te0R8AsLlbmoeHNpMt-V50avM2EHe4",
-      appId: "1:340469481850:web:449bdbdf2c9f49f82216c3",
-      messagingSenderId: "340469481850",
-      projectId: "test-1fc5d",
-      storageBucket: "test-1fc5d.firebasestorage.app",
+        apiKey: "AIzaSyCR9Te0R8AsllbmoeHNpMt-V5OavM2EHe4",
+        authDomain: "test-1fc5d.firebaseapp.com",
+        projectId: "test-1fc5d",
+        storageBucket: "test-1fc5d.firebasestorage.app",
+        messagingSenderId: "340469481850",
+        appId: "1:340469481850:web:449bdbdf2c9f49f82216c3",
     ),
   );
 
-  runApp(Main());
+  runApp(const RootApp());
 }
 
-class Main extends StatelessWidget {
+class RootApp extends StatefulWidget {
+  const RootApp({super.key});
+
+  @override
+  State<RootApp> createState() => _RootAppState();
+}
+
+class _RootAppState extends State<RootApp> {
+  AppState? _itsoState;
+  bool _initialized = false;
+  late String _url;
+
+  @override
+  void initState() {
+    super.initState();
+    _url = Uri.base.toString().toLowerCase();
+    _initApp();
+  }
+
+  Future<void> _initApp() async {
+    if (_url.contains('itsoadmin')) {
+      _itsoState = AppState(
+        auth: MockAuthRepository(),
+        roomsRepo: WebLocalRoomsRepository(),
+      );
+      await _itsoState!.bootstrap();
+    }
+
+    if (mounted) {
+      setState(() {
+        _initialized = true;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: "Capstone Front Door",
+    if (!_initialized) {
+      return const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
 
-      initialRoute: Uri.base.path == '/' ? '/' : Uri.base.path,
-
-      onGenerateRoute: (settings) {
-        // Automatically redirect mobile vs web routes
-        switch (settings.name) {
-        // ===== DEFAULT =====
-          case '/':
-            return MaterialPageRoute(
-              builder: (_) => Webstudent(),
-            );
-
-        // ===== MOBILE =====
-          case '/studentapp':
-            return MaterialPageRoute(
-              builder: (_) => Appstudent(),
-            );
-
-        // ===== WEB =====
-          case '/itsoadmin':
-            return MaterialPageRoute(
-              builder: (_) => LandingITSO(),
-            );
-
-        // ===== FALLBACK =====
-          default:
-            return MaterialPageRoute(
-              builder: (_) => Scaffold(
-                body: Center(
-                  child: Text(
-                    'Page not found: ${settings.name}',
-                    style: const TextStyle(fontSize: 18),
-                  ),
-                ),
-              ),
-            );
-        }
-      },
-    );
+    if (_url.contains('studentapp')) {
+      return MainApp();
+    } else if (_url.contains('itsoadmin')) {
+      return MyApp(appState: _itsoState!);
+    } else {
+      return Webstudent();
+    }
   }
 }

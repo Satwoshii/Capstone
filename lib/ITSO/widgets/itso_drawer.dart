@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../app_state.dart';
-import '../pages/login.dart';
+import '../pages/login/screens/login_screen.dart';
 import '../pages/reportLog.dart';
 import '../pages/qr_management.dart'; // <- ensure this filename & casing
 import '../pages/pcManagement.dart';
@@ -159,7 +159,7 @@ class ItsoDrawer extends StatelessWidget {
                       await app.signOut();
                       if (!context.mounted) return;
                       Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(builder: (_) => const LoginPage()),
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
                             (_) => false,
                       );
                     },

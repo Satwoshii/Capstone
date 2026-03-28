@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
-import 'dashboard.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../services/auth_service.dart';
+import '../services/jwt_service.dart';
+import 'package:test1/Students/studentapp/dashboard.dart';
+import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
   @override
-  _LoginScreenState createState() => _LoginScreenState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
@@ -11,36 +18,43 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController email = TextEditingController();
   final TextEditingController password = TextEditingController();
 
+  final auth = AuthService();
+
   bool showPassword = false;
 
-  void login(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Face Verification"),
-        content: const Text("Face recognized successfully"),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => Dashboard()),
-              );
-            },
-            child: const Text("Continue"),
-          )
-        ],
-      ),
-    );
+  // 🔥 LOGIN FUNCTION (from your 2nd code)
+  Future<void> loginUser() async {
+    final Map<String, dynamic>? user =
+    await auth.login(email.text, password.text);
+
+    if (user != null) {
+      final String token = JWTService.generateToken(user);
+
+      final SharedPreferences prefs =
+      await SharedPreferences.getInstance();
+      await prefs.setString("token", token);
+
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => Dashboard()),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Invalid Credentials")),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-
       body: Container(
 
-        // BACKGROUND IMAGE (same idea as CSS background)
+        // 🔥 BACKGROUND IMAGE
         decoration: const BoxDecoration(
           image: DecorationImage(
             image: AssetImage("assets/NUBackdrop.png"),
@@ -50,10 +64,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
         child: Center(
           child: Container(
-
-            // LOGIN CARD (like .login-container)
             width: 320,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 20, vertical: 25),
 
             decoration: BoxDecoration(
               color: Colors.white,
@@ -62,7 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 BoxShadow(
                   color: Colors.black26,
                   blurRadius: 25,
-                  offset: Offset(0,10),
+                  offset: Offset(0, 10),
                 )
               ],
             ),
@@ -89,7 +102,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 20),
 
-                // EMAIL FIELD
+                // EMAIL
                 TextField(
                   controller: email,
                   decoration: InputDecoration(
@@ -97,13 +110,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                    contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 10),
                   ),
                 ),
 
                 const SizedBox(height: 12),
 
-                // PASSWORD FIELD
+                // PASSWORD
                 TextField(
                   controller: password,
                   obscureText: !showPassword,
@@ -112,7 +126,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                    contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 10),
                   ),
                 ),
 
@@ -143,12 +158,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   width: 120,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFF2C300), // NU yellow
+                      backgroundColor: const Color(0xFFF2C300),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
                       ),
                     ),
-                    onPressed: () => login(context),
+                    onPressed: loginUser, // 🔥 CONNECTED TO AUTH
                     child: const Text(
                       "Log In",
                       style: TextStyle(
@@ -157,7 +172,21 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
-                )
+                ),
+
+                const SizedBox(height: 10),
+
+                // REGISTER BUTTON
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const RegisterScreen()),
+                    );
+                  },
+                  child: const Text("Create Account"),
+                ),
               ],
             ),
           ),
