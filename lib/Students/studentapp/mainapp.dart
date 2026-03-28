@@ -1,25 +1,38 @@
-import 'package:flutter/material.dart';
-// Import local screens for navigation
-import 'login.dart';
-import 'dashboard.dart';
+import 'package:flutter/material.dart'; // Import Flutter's material design library
+import 'package:firebase_core/firebase_core.dart'; // Import Firebase Core to initialize the connection
 
-// The main entry point of the Flutter application
-void main() {
-  runApp(Appstudent());
+import 'login/screens/splash_screen.dart'; // Import the initial splash screen
+
+// The main entry point for the Student application
+void main() async {
+  // Ensure that Flutter widget binding is initialized before calling asynchronous code
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize the Firebase connection with the project's unique configuration
+  await Firebase.initializeApp(
+    options: const FirebaseOptions(
+      apiKey: "AIzaSyCR9Te0R8AsLlbmoeHNpMt-V50avM2EHe4", // Firebase API Key
+      appId: "1:340469481850:web:449bdbdf2c9f49f82216c3", // Unique Application ID
+      messagingSenderId: "340469481850", // ID for Firebase Cloud Messaging
+      projectId: "test-1fc5d", // Firebase Project ID
+      storageBucket: "test-1fc5d.firebasestorage.app", // Cloud storage path
+    ),
+  );
+
+  // Run the root widget of the application
+  runApp(MainApp());
 }
 
-// MyApp is the root widget of the application
-class Appstudent extends StatelessWidget {
+// The root widget of the Student application
+class MainApp extends StatelessWidget {
+
   @override
   Widget build(BuildContext context) {
+    // Return the MaterialApp wrapper which configures the overall theme and routing
     return MaterialApp(
-      title: 'QR Peripheral Monitoring',
-      // Disable the 'Debug' banner in the top right corner
-      debugShowCheckedModeBanner: false,
-      // Define the global theme for the application
-      theme: ThemeData(primarySwatch: Colors.blue),
-      // Set the initial screen to the LoginScreen
-      home: LoginScreen(),
+      debugShowCheckedModeBanner: false, // Hide the "Debug" banner in the corner
+      title: "Capstone Front Door", // Title shown in the browser tab or task switcher
+      home: SplashScreen(), // Set the splash screen as the starting page
     );
   }
 }

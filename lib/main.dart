@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 
 // ITSO
 import 'ITSO/landingITso.dart';
@@ -12,7 +13,10 @@ import 'Students/studentvw_pages/login/main2.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
+  // Enable path-based URLs (removes the # from the URL)
+  usePathUrlStrategy();
+
   // Initialize Firebase here so it's available for the whole app
   await Firebase.initializeApp(
     options: const FirebaseOptions(
@@ -24,53 +28,28 @@ void main() async {
     ),
   );
 
-  runApp(Main());
+  runApp(const Main());
 }
 
 class Main extends StatelessWidget {
+  const Main({super.key});
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: "Capstone Front Door",
+    // Determine which app to load by checking the full URL string
+    final String url = Uri.base.toString().toLowerCase();
 
-      initialRoute: Uri.base.path == '/' ? '/' : Uri.base.path,
-
-      onGenerateRoute: (settings) {
-        // Automatically redirect mobile vs web routes
-        switch (settings.name) {
-        // ===== DEFAULT =====
-          case '/':
-            return MaterialPageRoute(
-              builder: (_) => Webstudent(),
-            );
-
-        // ===== MOBILE =====
-          case '/studentapp':
-            return MaterialPageRoute(
-              builder: (_) => Appstudent(),
-            );
-
-        // ===== WEB =====
-          case '/itsoadmin':
-            return MaterialPageRoute(
-              builder: (_) => LandingITSO(),
-            );
-
-        // ===== FALLBACK =====
-          default:
-            return MaterialPageRoute(
-              builder: (_) => Scaffold(
-                body: Center(
-                  child: Text(
-                    'Page not found: ${settings.name}',
-                    style: const TextStyle(fontSize: 18),
-                  ),
-                ),
-              ),
-            );
-        }
-      },
-    );
+    if (url.contains('studentapp')) {
+      return MainApp();
+    } else if (url.contains('itsoadmin')) {
+      // Wrap in MaterialApp because LandingITSO is just a Scaffold
+      return const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: "ITSO Admin",
+        home: LandingITSO(),
+      );
+    } else {
+      return Webstudent();
+    }
   }
 }

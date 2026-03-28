@@ -1,28 +1,40 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 // Import the QR scanning screen for navigation
 import 'qr_scan.dart';
 import 'report_page.dart';
+import 'login/screens/login_screen.dart';
 
 // Dashboard is the main screen of the application after logging in.
-// --- FRONTEND DESIGN NOTE ---
-// This screen uses a Scaffold with an AppBar, Drawer, and Body.
-// To change the overall layout, modify the Scaffold properties.
 class Dashboard extends StatelessWidget {
+
+  // Method to clear the session and redirect to the login screen
+  Future<void> _logout(BuildContext context) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.remove("token"); // Remove the token from local storage
+    
+    if (context.mounted) {
+      // Clear navigation history and send the user back to the LoginScreen
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       // --- DESIGN: APP BAR ---
-      // This is the top branding area. Modify 'backgroundColor' or 'elevation' here.
-      appBar: AppBar(title: Text("Dashboard")),
+      appBar: AppBar(title: const Text("Dashboard")),
 
       // --- DESIGN: SIDE DRAWER ---
-      // This is the navigation menu. Change the color in BoxDecoration or fonts in Text styles.
       drawer: Drawer(
         child: ListView(
           children: [
-            // Side menu Header - modify background color or add a profile image here
-            DrawerHeader(
+            // Side menu Header
+            const DrawerHeader(
               decoration: BoxDecoration(color: Colors.blue),
               child: Text(
                 "Menu",
@@ -35,49 +47,39 @@ class Dashboard extends StatelessWidget {
               leading: const Icon(Icons.support_agent),
               title: const Text("Contact ITSO"),
               onTap: () {
-
                 Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => const ReportPage(),
                   ),
                 );
-
               },
             ),
 
             ListTile(
-              leading: Icon(Icons.logout),
-              title: Text("Logout"),
-              onTap: () {
-                Navigator.pop(context); // Close drawer
-                Navigator.pop(context); // Go back to Login
-              },
+              leading: const Icon(Icons.logout),
+              title: const Text("Logout"),
+              onTap: () => _logout(context),
             ),
           ],
         ),
       ),
 
       // --- DESIGN: MAIN CONTENT AREA ---
-      // The body is centered. You can change the layout to a Padding/ListView if more content is added.
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Headline Text - Modify 'TextStyle' for font size, weight, and color.
-            Text(
+            const Text(
               "Welcome to the QR Monitoring System",
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             
-            // Spacing between elements
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
 
-            // --- DESIGN: CALL TO ACTION BUTTON ---
-            // This is the primary button. Modify ElevatedButton theme or style here.
             ElevatedButton.icon(
-              icon: Icon(Icons.qr_code_scanner),
-              label: Text("Scan QR Code"),
+              icon: const Icon(Icons.qr_code_scanner),
+              label: const Text("Scan QR Code"),
               onPressed: () {
                 Navigator.push(
                   context,
