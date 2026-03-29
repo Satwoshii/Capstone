@@ -5,6 +5,7 @@ import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../app_state.dart';
 import '../widgets/itso_drawer.dart';
@@ -18,7 +19,6 @@ class QrManagementPage extends StatefulWidget {
 }
 
 class _QrManagementPageState extends State<QrManagementPage> {
-
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   final TextEditingController _pcCtrl = TextEditingController();
 
@@ -35,7 +35,6 @@ class _QrManagementPageState extends State<QrManagementPage> {
 
   // UNIQUE CODE GENERATOR
   String _generateUniqueCode(String lab, String pc) {
-
     final rand = DateTime.now()
         .millisecondsSinceEpoch
         .toRadixString(16)
@@ -45,34 +44,63 @@ class _QrManagementPageState extends State<QrManagementPage> {
     return "$lab-PC$pc-$rand";
   }
 
-  void _generate() {
-
+  Future<void> _generate() async {
     final app = AppStateScope.of(context);
     final lab = _selectedLab ?? '';
     final pc = _pcCtrl.text.trim();
 
     if (lab.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select a Lab Room'))
+        const SnackBar(content: Text('Please select a Lab Room')),
       );
       return;
     }
 
     if (pc.isEmpty || int.tryParse(pc) == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Enter a valid PC number'))
+        const SnackBar(content: Text('Enter a valid PC number')),
       );
       return;
     }
 
     if (!app.isValidLab(lab)) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid Lab Room'))
+        const SnackBar(content: Text('Invalid Lab Room')),
       );
       return;
     }
 
     final uniqueCode = _generateUniqueCode(lab, pc);
+
+    // Prevent duplicate PC number in the same lab
+    final existingPc = await FirebaseFirestore.instance
+        .collection('pcs')
+        .where('lab', isEqualTo: lab)
+        .where('pc', isEqualTo: 'PC $pc')
+        .get();
+
+    if (existingPc.docs.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('PC $pc already exists in $lab')),
+      );
+      return;
+    }
+
+    // Save record to Firestore
+    await FirebaseFirestore.instance.collection('pcs').doc(uniqueCode).set({
+      'lab': lab,
+      'pc': 'PC $pc',
+      'code': uniqueCode,
+      'status': 'available',
+      'comment': '',
+      'created_at': Timestamp.now(),
+      'peripherals': {
+        'keyboard': true,
+        'mouse': true,
+        'monitor': true,
+        'cables': true,
+      },
+    });
 
     final url = "https://test-1fc5d.web.app/scan?code=$uniqueCode";
 
@@ -80,10 +108,13 @@ class _QrManagementPageState extends State<QrManagementPage> {
       _uniqueCode = uniqueCode;
       _qrData = url;
     });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('QR Generated and saved successfully')),
+    );
   }
 
   Future<String> _loadLogoDataUrl() async {
-
     if (_logoDataUrlCache != null) {
       return _logoDataUrlCache!;
     }
@@ -92,12 +123,10 @@ class _QrManagementPageState extends State<QrManagementPage> {
     final b64 = base64Encode(bytes.buffer.asUint8List());
 
     _logoDataUrlCache = 'data:image/png;base64,$b64';
-
     return _logoDataUrlCache!;
   }
 
   Future<void> _printQr() async {
-
     if (_qrData == null) return;
 
     final painter = QrPainter(
@@ -129,7 +158,6 @@ class _QrManagementPageState extends State<QrManagementPage> {
 <title>Print QR</title>
 
 <style>
-
 body{
 margin:0;
 display:flex;
@@ -172,7 +200,6 @@ width:96px;
 height:96px;
 transform:translate(-50%,-50%);
 }
-
 </style>
 </head>
 
@@ -187,7 +214,6 @@ transform:translate(-50%,-50%);
 </div>
 
 <script>
-
 window.onload=function(){
 setTimeout(function(){
 window.print();
@@ -197,7 +223,6 @@ window.print();
 window.onafterprint=function(){
 window.close();
 };
-
 </script>
 
 </body>
@@ -212,16 +237,12 @@ window.close();
 
   @override
   Widget build(BuildContext context) {
-
     final color = Theme.of(context).colorScheme;
     final app = AppStateScope.of(context);
 
     return Scaffold(
-
       key: _scaffoldKey,
-
       drawer: const ItsoDrawer(),
-
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.menu, color: Colors.white),
@@ -234,26 +255,24 @@ window.close();
         ),
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(4),
-          child: SizedBox(height: 4, child: ColoredBox(color: Colors.amber)),
+          child: SizedBox(
+            height: 4,
+            child: ColoredBox(color: Colors.amber),
+          ),
         ),
       ),
-
       body: Padding(
         padding: const EdgeInsets.all(24),
-
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
             SizedBox(
               width: 320,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-
                   const Text("Select Lab Room"),
                   const SizedBox(height: 6),
-
                   DropdownButtonFormField<String>(
                     value: _selectedLab,
                     items: app.labs
@@ -265,10 +284,11 @@ window.close();
                     )
                         .toList(),
                     onChanged: (v) => setState(() => _selectedLab = v),
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                    ),
                   ),
-
                   const SizedBox(height: 12),
-
                   TextField(
                     controller: _pcCtrl,
                     keyboardType: TextInputType.number,
@@ -277,35 +297,26 @@ window.close();
                       border: OutlineInputBorder(),
                     ),
                   ),
-
                   const SizedBox(height: 12),
-
                   ElevatedButton(
                     onPressed: _generate,
                     child: const Text("Generate QR"),
                   ),
-
                 ],
               ),
             ),
-
             const SizedBox(width: 40),
-
             Expanded(
               child: Column(
                 children: [
-
                   if (_uniqueCode != null)
                     Column(
                       children: [
-
                         const Text(
                           "Unique Code",
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
-
                         const SizedBox(height: 8),
-
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
@@ -321,12 +332,9 @@ window.close();
                             ),
                           ),
                         ),
-
                         const SizedBox(height: 20),
-
                       ],
                     ),
-
                   if (_qrData != null)
                     Container(
                       padding: const EdgeInsets.all(18),
@@ -337,25 +345,20 @@ window.close();
                       child: QrImageView(
                         data: _qrData!,
                         size: 360,
-                        embeddedImage:
-                        const AssetImage('assets/nu_logo.png'),
+                        embeddedImage: const AssetImage('assets/nu_logo.png'),
                         embeddedImageStyle:
                         const QrEmbeddedImageStyle(size: Size(64, 64)),
                       ),
                     ),
-
                   const SizedBox(height: 20),
-
                   if (_qrData != null)
                     ElevatedButton(
                       onPressed: _printQr,
                       child: const Text("Print QR"),
                     ),
-
                 ],
               ),
-            )
-
+            ),
           ],
         ),
       ),

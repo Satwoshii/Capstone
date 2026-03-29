@@ -1,166 +1,248 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+
 import '../widgets/itso_drawer.dart';
 
 class ReportViewPage extends StatelessWidget {
+  final String docId;
   final String lab;
-  final int pcNo;
+  final String pcLabel;
+  final String code;
   final Map<String, bool> status;
   final String comment;
+  final String reportedBy;
 
   const ReportViewPage({
     super.key,
+    required this.docId,
     required this.lab,
-    required this.pcNo,
+    required this.pcLabel,
+    required this.code,
     required this.status,
     required this.comment,
+    required this.reportedBy,
   });
+
+  Future<void> _markResolved(BuildContext context) async {
+    await FirebaseFirestore.instance.collection('pcs').doc(docId).update({
+      'status': 'available',
+      'comment': '',
+      'reported_by': '',
+      'updated_at': FieldValue.serverTimestamp(),
+      'peripherals': {
+        'keyboard': true,
+        'mouse': true,
+        'monitor': true,
+        'cables': true,
+        'system_unit': true,
+      },
+    });
+
+    await FirebaseFirestore.instance
+        .collection('reports')
+        .where('pc_code', isEqualTo: code)
+        .where('status', isEqualTo: 'pending')
+        .get()
+        .then((snapshot) async {
+      for (final doc in snapshot.docs) {
+        await doc.reference.update({
+          'status': 'resolved',
+          'resolved_at': FieldValue.serverTimestamp(),
+        });
+      }
+    });
+
+    if (!context.mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('PC marked as resolved')),
+    );
+    Navigator.pop(context);
+  }
+
+  Future<void> _makeIncidentReport(BuildContext context) async {
+    await FirebaseFirestore.instance.collection('incident_reports').add({
+      'pc_code': code,
+      'lab': lab,
+      'pc': pcLabel,
+      'comment': comment,
+      'reported_by': reportedBy,
+      'peripherals': status,
+      'created_at': FieldValue.serverTimestamp(),
+      'source': 'itso',
+    });
+
+    if (!context.mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Incident report created')),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final key = GlobalKey<ScaffoldState>();
+    final scaffoldKey = GlobalKey<ScaffoldState>();
     final color = Theme.of(context).colorScheme;
 
     return Scaffold(
-      key: key,
+      key: scaffoldKey,
       drawer: const ItsoDrawer(),
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.menu, color: Colors.white),
-          onPressed: () => key.currentState?.openDrawer(),
-          tooltip: 'Menu',
+          onPressed: () => scaffoldKey.currentState?.openDrawer(),
         ),
         backgroundColor: color.primary,
-        elevation: 0,
-        title: const Text('ITSO View', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        title: const Text(
+          'ITSO View',
+          style: TextStyle(color: Colors.white),
+        ),
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(4),
-          child: SizedBox(height: 4, child: ColoredBox(color: Colors.amber)),
+          child: SizedBox(
+            height: 4,
+            child: ColoredBox(color: Colors.amber),
+          ),
         ),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(color: Colors.amber, borderRadius: BorderRadius.circular(8)),
-                child: Text('Lab: $lab', style: const TextStyle(fontWeight: FontWeight.w700)),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.amber,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'Lab: $lab',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 22,
+                ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             Expanded(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _PcPreview(number: pcNo, hasProblem: status.values.any((ok) => !ok)),
+                  Container(
+                    width: 170,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.red, width: 2),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(pcLabel),
+                        const SizedBox(height: 12),
+                        Container(
+                          width: 60,
+                          height: 60,
+                          color: Colors.white,
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(width: 24),
-                  Expanded(flex: 1, child: _Checklist(status: status)),
+                  Container(
+                    width: 220,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: Colors.black54),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: status.entries.map((entry) {
+                        final ok = entry.value;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Row(
+                            children: [
+                              Expanded(child: Text(entry.key)),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: ok ? Colors.green : Colors.red,
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  ok ? 'Ok' : 'No',
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
                   const SizedBox(width: 24),
-                  Expanded(flex: 1, child: _CommentsBox(text: comment)),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Comments:',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(comment.isEmpty ? 'No comment' : comment),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Reported by: ${reportedBy.isEmpty ? "Unknown" : reportedBy}',
+                          ),
+                          const SizedBox(height: 12),
+                          Text('PC Code: $code'),
+                          const Spacer(),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Column(
+                              children: [
+                                ElevatedButton(
+                                  onPressed: () => _makeIncidentReport(context),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.amber,
+                                    foregroundColor: Colors.black,
+                                  ),
+                                  child: const Text('Make Incident Report'),
+                                ),
+                                const SizedBox(height: 10),
+                                ElevatedButton(
+                                  onPressed: () => _markResolved(context),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.amber,
+                                    foregroundColor: Colors.black,
+                                  ),
+                                  child: const Text('Mark Resolved'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _PcPreview extends StatelessWidget {
-  final int number;
-  final bool hasProblem;
-  const _PcPreview({required this.number, required this.hasProblem});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 260,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('PC # $number', style: const TextStyle(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 10),
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: hasProblem ? Colors.red : Colors.black26, width: hasProblem ? 2 : 1),
-              ),
-              alignment: Alignment.center,
-              child: const Icon(Icons.desktop_windows, size: 56, color: Colors.white70),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Checklist extends StatelessWidget {
-  final Map<String, bool> status;
-  const _Checklist({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final items = status.entries.toList();
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black26), borderRadius: BorderRadius.circular(12)),
-      child: ListView.separated(
-        itemCount: items.length,
-        separatorBuilder: (_, __) => const Divider(height: 16),
-        itemBuilder: (_, i) {
-          final name = items[i].key;
-          final ok = items[i].value;
-          return Row(
-            children: [
-              Expanded(child: Text(name, style: const TextStyle(fontSize: 16))),
-              _StatusPill(ok: ok),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _StatusPill extends StatelessWidget {
-  final bool ok;
-  const _StatusPill({required this.ok});
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(color: ok ? Colors.green : Colors.red, borderRadius: BorderRadius.circular(999)),
-      child: Text(ok ? 'Ok' : 'No', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-    );
-  }
-}
-
-class _CommentsBox extends StatelessWidget {
-  final String text;
-  const _CommentsBox({required this.text});
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Comments:', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-        const SizedBox(height: 8),
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black26), borderRadius: BorderRadius.circular(12)),
-            child: SingleChildScrollView(
-              child: Text(text.isEmpty ? '—' : '"$text"', style: const TextStyle(fontSize: 14, height: 1.3)),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

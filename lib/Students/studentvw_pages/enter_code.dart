@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart'; // Import Flutter material design components
-import 'report_form.dart'; // Import the report form page to navigate to it later
+import '../studentvw_pages/report_form.dart';
 
 // Define a StatefulWidget for the page where students enter a unique code
 class EnterCodePage extends StatefulWidget {
@@ -31,7 +31,7 @@ class _EnterCodePageState extends State<EnterCodePage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const ReportFormPage(),
+        builder: (context) => StudentReportFormPage(),
       ),
     );
   }

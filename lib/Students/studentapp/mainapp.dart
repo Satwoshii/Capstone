@@ -1,6 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import 'login/screens/splash_screen.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Firebase.initializeApp(
+    options: const FirebaseOptions(
+      apiKey: "AIzaSyCR9Te0R8AsllbmoeHNpMt-V5OavM2EHe4",
+      authDomain: "test-1fc5d.firebaseapp.com",
+      projectId: "test-1fc5d",
+      storageBucket: "test-1fc5d.firebasestorage.app",
+      messagingSenderId: "340469481850",
+      appId: "1:340469481850:web:449bdbdf2c9f49f82216c3",
+    ),
+  );
+
+  runApp(const MainApp());
+}
 
 class MainApp extends StatelessWidget {
   const MainApp({super.key});
