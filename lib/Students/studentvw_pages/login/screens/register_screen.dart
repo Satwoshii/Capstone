@@ -1,7 +1,6 @@
-import 'package:flutter/material.dart'; // Import Flutter material design package
-import '../services/auth_service.dart'; // Import the authentication service
+import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
 
-// Define a StatefulWidget for the Register Screen
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -9,41 +8,33 @@ class RegisterScreen extends StatefulWidget {
   State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-// Define the state for RegisterScreen
 class _RegisterScreenState extends State<RegisterScreen> {
-  // Controllers to capture user input from the TextFields
-  final email = TextEditingController();
-  final password = TextEditingController();
-  
-  // Instance of AuthService to handle registration logic
+  final TextEditingController email = TextEditingController();
+  final TextEditingController password = TextEditingController();
   final auth = AuthService();
 
-  // Function to handle the user registration process
+  bool showPassword = false;
+
   Future<void> registerUser() async {
-    // Basic validation: Check if email or password fields are empty
     if (email.text.isEmpty || password.text.isEmpty) {
-      // Show a snackbar if fields are missing
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please fill in all fields")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please fill in all fields")),
+        );
+      }
       return;
     }
 
     try {
-      // Call the register method from AuthService with provided credentials
       await auth.register(email.text, password.text);
 
-      // Check if the widget is still in the tree before updating UI
       if (mounted) {
-        // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Registration Successful")),
         );
-        // Navigate back to the previous screen (usually the Login screen)
         Navigator.pop(context);
       }
     } catch (e) {
-      // If an error occurs during registration, catch it and show a snackbar
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Error: ${e.toString()}")),
@@ -53,32 +44,148 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   @override
+  void dispose() {
+    email.dispose();
+    password.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Build the UI for the registration screen
     return Scaffold(
-      appBar: AppBar(title: const Text("Register")), // Header title
-      body: Padding(
-        padding: const EdgeInsets.all(20), // Add padding around the content
-        child: Column(
-          children: [
-            // TextField for entering the Email
-            TextField(
-              controller: email, // Connect to the email controller
-              decoration: const InputDecoration(labelText: "Email"),
+      body: Container(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage("assets/Images/NUBackdrop.png"),
+            fit: BoxFit.cover,
+          ),
+        ),
+        child: Center(
+          child: Container(
+            width: 320,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 25,
+                  offset: Offset(0, 10),
+                )
+              ],
             ),
-            // TextField for entering the Password
-            TextField(
-              controller: password, // Connect to the password controller
-              obscureText: true, // Hide the text for security
-              decoration: const InputDecoration(labelText: "Password"),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Logo
+                Image.asset(
+                  "assets/Images/NUSchoolLogo.png",
+                  width: 80,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  "Register",
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Email TextField
+                TextField(
+                  controller: email,
+                  decoration: InputDecoration(
+                    labelText: "Email",
+                    floatingLabelBehavior: FloatingLabelBehavior.auto,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFF2C300),
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Password TextField
+                TextField(
+                  controller: password,
+                  obscureText: !showPassword,
+                  enableSuggestions: false,
+                  autocorrect: false,
+                  decoration: InputDecoration(
+                    labelText: "Password",
+                    floatingLabelBehavior: FloatingLabelBehavior.auto,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFF2C300),
+                        width: 2,
+                      ),
+                    ),
+                    suffixIcon: InkWell(
+                      onTap: () {
+                        setState(() {
+                          showPassword = !showPassword;
+                        });
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Image.asset(
+                          showPassword
+                              ? "assets/Icons/eye.png"
+                              : "assets/Icons/hidden.png",
+                          width: 24,
+                          height: 24,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Register Button
+                SizedBox(
+                  width: 140,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFF2C300),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    onPressed: registerUser,
+                    child: const Text(
+                      "Register",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
+                // Back to Login
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  child: const Text("Already have an account? Log In"),
+                ),
+              ],
             ),
-            const SizedBox(height: 20), // Add vertical spacing
-            // Button to trigger the registration process
-            ElevatedButton(
-              onPressed: registerUser, // Call the registerUser function on tap
-              child: const Text("Register"),
-            ),
-          ],
+          ),
         ),
       ),
     );

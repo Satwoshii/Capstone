@@ -1,51 +1,44 @@
-import 'package:flutter/material.dart'; // Import Flutter UI components
-import 'package:shared_preferences/shared_preferences.dart'; // Import shared_preferences for local data persistence
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-import '../services/auth_service.dart'; // Import the authentication service logic
-import '../services/jwt_service.dart'; // Import the JWT service for token generation
-import '../../dashboardweb.dart'; // Import the dashboard page for navigation after login
-import 'register_screen.dart'; // Import the registration screen for navigation
+import '../services/auth_service.dart';
+import '../services/jwt_service.dart';
+import '../../dashboardweb.dart';
+import 'register_screen.dart';
 
-// Define a StatefulWidget for the login screen
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
-
   @override
-  State<LoginScreen> createState() => _LoginScreenState(); // Initialize state for the login screen
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
-// State management class for LoginScreen
 class _LoginScreenState extends State<LoginScreen> {
-  // Controllers to capture user input from text fields
-  final email = TextEditingController();
-  final password = TextEditingController();
-  
-  // Instance of AuthService to handle login logic
+
+  final TextEditingController email = TextEditingController();
+  final TextEditingController password = TextEditingController();
+
   final auth = AuthService();
 
-  // Asynchronous function to handle user login process
+  bool showPassword = false;
+
   Future<void> loginUser() async {
-    // Call the login method from AuthService and explicitly define the expected user map return type
-    final Map<String, dynamic>? user = await auth.login(email.text, password.text);
+    final Map<String, dynamic>? user =
+    await auth.login(email.text, password.text);
 
     if (user != null) {
-      // If login is successful, generate a JWT containing the user's identity (UID, email, role)
       final String token = JWTService.generateToken(user);
 
-      // Save the generated token to local storage using SharedPreferences
-      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final SharedPreferences prefs =
+      await SharedPreferences.getInstance();
       await prefs.setString("token", token);
 
-      // Check if the widget is still mounted before navigating
       if (mounted) {
-        // Navigate to the DashboardPage and remove the login screen from navigation history
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const DashboardPage()),
         );
       }
     } else {
-      // If login fails (user is null), show an error message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Invalid Credentials")),
@@ -55,42 +48,154 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   @override
+  void dispose() {
+    email.dispose();
+    password.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Build the visual layout of the login screen
     return Scaffold(
-      appBar: AppBar(title: const Text("Login")), // Header title
-      body: Padding(
-        padding: const EdgeInsets.all(20), // Internal padding for form layout
-        child: Column(
-          children: [
-            // Text field for entering the email
-            TextField(
-              controller: email, // Connect to email controller
-              decoration: const InputDecoration(labelText: "Email"), // Label for the field
+      body: Container(
+        // Background image
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage("assets/Images/NUBackdrop.png"),
+            fit: BoxFit.cover,
+          ),
+        ),
+        child: Center(
+          child: Container(
+            width: 320,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 25,
+                  offset: Offset(0, 10),
+                )
+              ],
             ),
-            // Text field for entering the password
-            TextField(
-              controller: password, // Connect to password controller
-              obscureText: true, // Obscure text for password security
-              decoration: const InputDecoration(labelText: "Password"), // Label for the field
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Logo
+                Image.asset(
+                  "assets/Images/NUSchoolLogo.png",
+                  width: 80,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  "Log In",
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Email field
+                TextField(
+                  controller: email,
+                  decoration: InputDecoration(
+                    labelText: "Email",
+                    floatingLabelBehavior: FloatingLabelBehavior.auto,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFF2C300),
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Password field with custom PNG eye icon
+                TextField(
+                  controller: password,
+                  obscureText: !showPassword,
+                  enableSuggestions: false,
+                  autocorrect: false,
+                  decoration: InputDecoration(
+                    labelText: "Password",
+                    floatingLabelBehavior: FloatingLabelBehavior.auto,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFF2C300),
+                        width: 2,
+                      ),
+                    ),
+                    suffixIcon: InkWell(
+                      onTap: () {
+                        setState(() {
+                          showPassword = !showPassword;
+                        });
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0), // optional padding
+                        child: Image.asset(
+                          showPassword
+                              ? "assets/Icons/eye.png"
+                              : "assets/Icons/hidden.png",
+                          width: 24,
+                          height: 24,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // Login button
+                SizedBox(
+                  width: 140,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFF2C300),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    onPressed: loginUser,
+                    child: const Text(
+                      "Log In",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
+                // Register button
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const RegisterScreen()),
+                    );
+                  },
+                  child: const Text("Create Account"),
+                ),
+              ],
             ),
-            const SizedBox(height: 20), // Vertical spacing
-            // Button to trigger the login process
-            ElevatedButton(
-              onPressed: loginUser, // Execute loginUser function on press
-              child: const Text("Login"), // Button label
-            ),
-            // Button to navigate to the registration screen
-            TextButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const RegisterScreen()),
-                );
-              },
-              child: const Text("Create Account"), // Label for the button
-            )
-          ],
+          ),
         ),
       ),
     );
