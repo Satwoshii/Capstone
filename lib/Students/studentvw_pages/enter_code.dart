@@ -17,7 +17,7 @@ class _EnterCodePageState extends State<EnterCodePage> {
 
   // Function called when the user clicks the "Submit" button
   void submitCode() {
-    final code = codeController.text.trim();
+    String code = codeController.text.trim();
 
     // Check if the input field is empty
     if(code.isEmpty){
@@ -28,6 +28,14 @@ class _EnterCodePageState extends State<EnterCodePage> {
       return; // Stop execution if validation fails
     }
 
+    // FIX:
+    // If the user pasted/scanned the full QR URL,
+    // extract only the actual unique code from ?code=
+    final uri = Uri.tryParse(code);
+    if (uri != null && uri.queryParameters.containsKey('code')) {
+      code = uri.queryParameters['code']!.trim();
+    }
+
     // Navigate to the ReportFormPage if the code is provided
     Navigator.push(
       context,
@@ -35,6 +43,12 @@ class _EnterCodePageState extends State<EnterCodePage> {
         builder: (context) => StudentReportFormPage(pcCode: code),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    codeController.dispose();
+    super.dispose();
   }
 
   @override
