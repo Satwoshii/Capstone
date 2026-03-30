@@ -119,7 +119,7 @@ class _QrManagementPageState extends State<QrManagementPage> {
       return _logoDataUrlCache!;
     }
 
-    final bytes = await rootBundle.load('assets/nu_logo.png');
+    final bytes = await rootBundle.load('assets/Image/NUSchoolLogo.png');
     final b64 = base64Encode(bytes.buffer.asUint8List());
 
     _logoDataUrlCache = 'data:image/png;base64,$b64';
