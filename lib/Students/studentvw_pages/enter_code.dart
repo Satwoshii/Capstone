@@ -17,9 +17,10 @@ class _EnterCodePageState extends State<EnterCodePage> {
 
   // Function called when the user clicks the "Submit" button
   void submitCode() {
+    final code = codeController.text.trim();
 
     // Check if the input field is empty
-    if(codeController.text.isEmpty){
+    if(code.isEmpty){
       // Show a snackbar message if no code was entered
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Enter unique code"))
@@ -31,7 +32,7 @@ class _EnterCodePageState extends State<EnterCodePage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => StudentReportFormPage(),
+        builder: (context) => StudentReportFormPage(pcCode: code),
       ),
     );
   }
@@ -75,7 +76,9 @@ class _EnterCodePageState extends State<EnterCodePage> {
                 controller: codeController, // Connect to the controller
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(), // Add an outline border to the field
+                  hintText: "e.g. L201-PC1-A1B2",
                 ),
+                onSubmitted: (_) => submitCode(),
               ),
 
               const SizedBox(height:15), // Space between input field and button

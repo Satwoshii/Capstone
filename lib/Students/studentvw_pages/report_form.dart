@@ -2,7 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 class StudentReportFormPage extends StatefulWidget {
-  const StudentReportFormPage({super.key});
+  final String? pcCode;
+  const StudentReportFormPage({super.key, this.pcCode});
 
   @override
   State<StudentReportFormPage> createState() => _StudentReportFormPageState();
@@ -29,7 +30,7 @@ class _StudentReportFormPageState extends State<StudentReportFormPage> {
   @override
   void initState() {
     super.initState();
-    _loadPcFromUrl();
+    _loadPcData();
   }
 
   @override
@@ -39,10 +40,16 @@ class _StudentReportFormPageState extends State<StudentReportFormPage> {
     super.dispose();
   }
 
-  Future<void> _loadPcFromUrl() async {
+  Future<void> _loadPcData() async {
     try {
-      final uri = Uri.base;
-      final code = uri.queryParameters['code'];
+      // 1. Check if code was passed directly via constructor
+      String? code = widget.pcCode;
+
+      // 2. If not, check the URL (Web deep link)
+      if (code == null || code.isEmpty) {
+        final uri = Uri.base;
+        code = uri.queryParameters['code'];
+      }
 
       if (code == null || code.isEmpty) {
         setState(() {
@@ -170,7 +177,7 @@ class _StudentReportFormPageState extends State<StudentReportFormPage> {
     if (_pcCode == null || _pcCode!.isEmpty) {
       return const Scaffold(
         body: Center(
-          child: Text('Invalid QR code'),
+          child: Text('Invalid QR code or unique code'),
         ),
       );
     }
@@ -179,7 +186,17 @@ class _StudentReportFormPageState extends State<StudentReportFormPage> {
       return Scaffold(
         appBar: AppBar(title: const Text('Student Report')),
         body: Center(
-          child: Text('PC not found for code: $_pcCode'),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('PC not found for code: $_pcCode'),
+              const SizedBox(height: 10),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Go Back'),
+              )
+            ],
+          ),
         ),
       );
     }

@@ -71,9 +71,8 @@ flutter:
   #uses-material-design: true
 
   # To add assets to your application, add an assets section, like this:
-#   assets:
-#     - assets/Images/NUBackdrop.png
-#     - assets/Images/NUSchoolLogo.png
+   assets:
+     - assets/Images/
 #     - assets/Icons/eye.png
 #     - assets/Icons/hidden.png
 
