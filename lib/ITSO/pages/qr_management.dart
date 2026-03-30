@@ -345,7 +345,7 @@ window.close();
                       child: QrImageView(
                         data: _qrData!,
                         size: 360,
-                        embeddedImage: const AssetImage('assets/nu_logo.png'),
+                        embeddedImage: const AssetImage('assets/Images/nu_logo.png'),
                         embeddedImageStyle:
                         const QrEmbeddedImageStyle(size: Size(64, 64)),
                       ),
