@@ -237,19 +237,7 @@ class _StudentReportFormPageState extends State<StudentReportFormPage> {
                           style: const TextStyle(color: Colors.black54),
                         ),
                         const SizedBox(height: 20),
-                        TextFormField(
-                          controller: _emailCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Student Email',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (value) {
-                            final v = value?.trim() ?? '';
-                            if (v.isEmpty) return 'Enter your email';
-                            if (!v.contains('@')) return 'Enter a valid email';
-                            return null;
-                          },
-                        ),
+
                         const SizedBox(height: 16),
                         _statusSwitch(
                           title: 'Mouse OK',
