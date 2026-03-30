@@ -95,7 +95,6 @@ class _SplashScreenState extends State<SplashScreen>
     final size = MediaQuery.of(context).size;
     w = size.width;
     h = size.height;
-
     scale = (w / 375).clamp(0.8, 1.4);
 
     return Scaffold(
@@ -173,13 +172,11 @@ class _SplashScreenState extends State<SplashScreen>
 
   Widget _buildLogoEmblem() {
     return Container(
-      width: 130 * scale,
-      height: 130 * scale,
+      width: 140 * scale,
+      height: 140 * scale,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: const RadialGradient(
-          colors: [Color(0xFF0044BB), Color(0xFF003087), Color(0xFF001A52)],
-        ),
+        color: Colors.white,
         border: Border.all(color: _nuGold, width: 2.5 * scale),
         boxShadow: [
           BoxShadow(
@@ -198,50 +195,23 @@ class _SplashScreenState extends State<SplashScreen>
         alignment: Alignment.center,
         children: [
           Container(
-            width: 110 * scale,
-            height: 110 * scale,
+            width: 120 * scale,
+            height: 120 * scale,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(
                 color: _nuGold.withOpacity(0.25),
-                width: 1 * scale,
+                width: 1,
               ),
             ),
           ),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  colors: [_nuGold, _nuLightGold, Color(0xFFE6B800)],
-                ).createShader(bounds),
-                child: Text(
-                  'NU',
-                  style: TextStyle(
-                    fontSize: 48 * scale,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    letterSpacing: 2,
-                  ),
-                ),
-              ),
-              SizedBox(height: 4 * scale),
-              Container(
-                width: 46 * scale,
-                height: 1.5 * scale,
-                color: _nuGold.withOpacity(0.75),
-              ),
-              SizedBox(height: 4 * scale),
-              Text(
-                'CLARK',
-                style: TextStyle(
-                  fontSize: 10 * scale,
-                  fontWeight: FontWeight.w700,
-                  color: _nuGold.withOpacity(0.9),
-                  letterSpacing: 4,
-                ),
-              ),
-            ],
+          ClipOval(
+            child: Image.asset(
+              'assets/Images/NUSchoolLogo.png',
+              width: 115 * scale,
+              height: 115 * scale,
+              fit: BoxFit.contain,
+            ),
           ),
         ],
       ),
@@ -283,11 +253,38 @@ class _SplashScreenState extends State<SplashScreen>
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Container(width: 56 * scale, height: 1, color: _nuGold),
+        Container(
+          width: 56 * scale,
+          height: 1,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(colors: [Colors.transparent, _nuGold]),
+          ),
+        ),
         SizedBox(width: 6 * scale),
-        Container(width: 5 * scale, height: 5 * scale, color: _nuGold),
+        Container(width: 5 * scale, height: 5 * scale, decoration: const BoxDecoration(color: _nuGold, shape: BoxShape.circle)),
         SizedBox(width: 6 * scale),
-        Container(width: 22 * scale, height: 1.5 * scale, color: _nuGold),
+        Container(width: 22 * scale, height: 1.5, color: _nuGold),
+        SizedBox(width: 6 * scale),
+        Container(
+          width: 8 * scale,
+          height: 8 * scale,
+          decoration: BoxDecoration(
+            border: Border.all(color: _nuGold, width: 1.5),
+          ),
+          transform: Matrix4.rotationZ(0.785),
+        ),
+        SizedBox(width: 6 * scale),
+        Container(width: 22 * scale, height: 1.5, color: _nuGold),
+        SizedBox(width: 6 * scale),
+        Container(width: 5 * scale, height: 5 * scale, decoration: const BoxDecoration(color: _nuGold, shape: BoxShape.circle)),
+        SizedBox(width: 6 * scale),
+        Container(
+          width: 56 * scale,
+          height: 1,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(colors: [_nuGold, Colors.transparent]),
+          ),
+        ),
       ],
     );
   }
@@ -297,7 +294,7 @@ class _SplashScreenState extends State<SplashScreen>
       padding: EdgeInsets.symmetric(horizontal: 20 * scale, vertical: 9 * scale),
       decoration: BoxDecoration(
         border: Border.all(color: _nuGold.withOpacity(0.4)),
-        borderRadius: BorderRadius.circular(3 * scale),
+        borderRadius: BorderRadius.circular(3),
         color: _nuGold.withOpacity(0.07),
       ),
       child: Text(
@@ -317,13 +314,9 @@ class _SplashScreenState extends State<SplashScreen>
       children: [
         SizedBox(
           width: 140 * scale,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(2 * scale),
-            child: LinearProgressIndicator(
-              backgroundColor: _nuWhite.withOpacity(0.1),
-              valueColor: const AlwaysStoppedAnimation<Color>(_nuGold),
-              minHeight: 2 * scale,
-            ),
+          child: LinearProgressIndicator(
+            backgroundColor: _nuWhite.withOpacity(0.1),
+            valueColor: const AlwaysStoppedAnimation<Color>(_nuGold),
           ),
         ),
         SizedBox(height: 10 * scale),
@@ -340,7 +333,6 @@ class _SplashScreenState extends State<SplashScreen>
   }
 }
 
-// Corner painter (unchanged)
 class _CornerPainter extends CustomPainter {
   final bool isLeft;
   const _CornerPainter({required this.isLeft});
