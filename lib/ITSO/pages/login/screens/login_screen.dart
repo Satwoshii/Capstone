@@ -70,7 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
         // Background image
         decoration: const BoxDecoration(
           image: DecorationImage(
-            image: AssetImage("assets/Images/NUBackdroptest.png"),
+            image: AssetImage("assets/Images/NUBackdrop.png"),
             fit: BoxFit.cover,
           ),
         ),
@@ -95,7 +95,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   // Logo at top
                   Image.asset(
-                    "assets/Images/NUSchoolLogotest.png",
+                    "assets/Images/NUSchoolLogo.png",
                     width: 120,
                   ),
                   const SizedBox(height: 10),
