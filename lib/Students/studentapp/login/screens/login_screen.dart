@@ -14,7 +14,6 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-
   final TextEditingController email = TextEditingController();
   final TextEditingController password = TextEditingController();
 
@@ -22,16 +21,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool showPassword = false;
 
-  // 🔥 LOGIN FUNCTION (from your 2nd code)
+  // 🔥 LOGIN FUNCTION
   Future<void> loginUser() async {
-    final Map<String, dynamic>? user =
-    await auth.login(email.text, password.text);
+    final Map<String, dynamic>? user = await auth.login(email.text, password.text);
 
     if (user != null) {
       final String token = JWTService.generateToken(user);
 
-      final SharedPreferences prefs =
-      await SharedPreferences.getInstance();
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setString("token", token);
 
       if (mounted) {
@@ -49,11 +46,31 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  InputDecoration _inputDecoration({
+    required String hint,
+    Widget? suffixIcon,
+  }) {
+    return InputDecoration(
+      hintText: hint,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(6),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+      suffixIcon: suffixIcon,
+    );
+  }
+
+  @override
+  void dispose() {
+    email.dispose();
+    password.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-
         // 🔥 BACKGROUND IMAGE
         decoration: const BoxDecoration(
           image: DecorationImage(
@@ -61,13 +78,10 @@ class _LoginScreenState extends State<LoginScreen> {
             fit: BoxFit.cover,
           ),
         ),
-
         child: Center(
           child: Container(
             width: 320,
-            padding: const EdgeInsets.symmetric(
-                horizontal: 20, vertical: 25),
-
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(14),
@@ -76,22 +90,18 @@ class _LoginScreenState extends State<LoginScreen> {
                   color: Colors.black26,
                   blurRadius: 25,
                   offset: Offset(0, 10),
-                )
+                ),
               ],
             ),
-
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-
                 // LOGO
                 Image.asset(
                   "assets/Images/NUSchoolLogo.png",
                   width: 80,
                 ),
-
                 const SizedBox(height: 10),
-
                 const Text(
                   "Log In",
                   style: TextStyle(
@@ -99,59 +109,43 @@ class _LoginScreenState extends State<LoginScreen> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-
                 const SizedBox(height: 20),
 
                 // EMAIL
                 TextField(
                   controller: email,
-                  decoration: InputDecoration(
-                    hintText: "Email",
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 10),
-                  ),
+                  decoration: _inputDecoration(hint: "Email"),
                 ),
-
                 const SizedBox(height: 12),
 
-                // PASSWORD
+                // PASSWORD WITH PNG EYE ICON
                 TextField(
                   controller: password,
                   obscureText: !showPassword,
-                  decoration: InputDecoration(
-                    hintText: "Password",
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 10),
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                // SHOW PASSWORD
-                Row(
-                  children: [
-                    Checkbox(
-                      value: showPassword,
-                      onChanged: (value) {
+                  enableSuggestions: false,
+                  autocorrect: false,
+                  decoration: _inputDecoration(
+                    hint: "Password",
+                    suffixIcon: InkWell(
+                      onTap: () {
                         setState(() {
-                          showPassword = value!;
+                          showPassword = !showPassword;
                         });
                       },
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Image.asset(
+                          showPassword
+                              ? "assets/Icons/eye.png"
+                              : "assets/Icons/hidden.png",
+                          width: 24,
+                          height: 24,
+                        ),
+                      ),
                     ),
-                    const Text(
-                      "Show Password",
-                      style: TextStyle(fontSize: 12),
-                    )
-                  ],
+                  ),
                 ),
-
-                const SizedBox(height: 10),
+                const SizedBox(height: 20),
 
                 // LOGIN BUTTON
                 SizedBox(
@@ -163,7 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(20),
                       ),
                     ),
-                    onPressed: loginUser, // 🔥 CONNECTED TO AUTH
+                    onPressed: loginUser,
                     child: const Text(
                       "Log In",
                       style: TextStyle(
@@ -173,7 +167,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 10),
 
                 // REGISTER BUTTON
@@ -181,8 +174,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
-                          builder: (_) => const RegisterScreen()),
+                      MaterialPageRoute(builder: (_) => const RegisterScreen()),
                     );
                   },
                   child: const Text("Create Account"),

@@ -25,7 +25,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   void initState() {
     super.initState();
-
     password.addListener(_validateInputs);
     confirmPassword.addListener(_validateInputs);
   }
@@ -52,7 +51,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (value.isEmpty) return "";
 
     int score = 0;
-
     if (value.length >= 8) score++;
     if (RegExp(r'[A-Z]').hasMatch(value)) score++;
     if (RegExp(r'[a-z]').hasMatch(value)) score++;
@@ -60,7 +58,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(value)) score++;
 
     if (score <= 2) return "Weak password";
-    if (score == 3 || score == 4) return "Medium password";
+    if (score <= 4) return "Medium password";
     return "Strong password";
   }
 
@@ -68,7 +66,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (value.isEmpty) return Colors.grey;
 
     int score = 0;
-
     if (value.length >= 8) score++;
     if (RegExp(r'[A-Z]').hasMatch(value)) score++;
     if (RegExp(r'[a-z]').hasMatch(value)) score++;
@@ -76,7 +73,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(value)) score++;
 
     if (score <= 2) return Colors.red;
-    if (score == 3 || score == 4) return Colors.orange;
+    if (score <= 4) return Colors.orange;
     return Colors.green;
   }
 
@@ -164,6 +161,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           width: 2,
         ),
       ),
+      suffixIcon: suffixIcon,
     );
   }
 
@@ -209,12 +207,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 20),
 
+                // Email
                 TextField(
                   controller: email,
                   decoration: _inputDecoration(label: "Email"),
                 ),
                 const SizedBox(height: 12),
 
+                // Password (show/hide PNG)
                 TextField(
                   controller: password,
                   obscureText: !showPassword,
@@ -259,6 +259,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 const SizedBox(height: 12),
 
+                // Confirm Password (show/hide PNG)
                 TextField(
                   controller: confirmPassword,
                   obscureText: !showConfirmPassword,
