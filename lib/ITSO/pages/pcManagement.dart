@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../app_state.dart';
 import '../landingITso.dart';
 import '../widgets/itso_drawer.dart';
 import 'pc_history.dart';
@@ -17,80 +18,111 @@ class _PcManagementPageState extends State<PcManagementPage> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   String? _selectedLab;
 
-  int _extractPcNumber(dynamic value) {
-    if (value == null) return 0;
-    final text = value.toString();
-    final match = RegExp(r'\d+').firstMatch(text);
-    if (match == null) return 0;
-    return int.tryParse(match.group(0)!) ?? 0;
-  }
-
   Map<String, bool> _normalizePeripherals(dynamic raw) {
     final defaults = <String, bool>{
-      'Keyboard': true,
-      'Mouse': true,
-      'Monitor': true,
-      'Cables': true,
-      'System Unit': true,
+      'keyboard': true,
+      'mouse': true,
+      'monitor': true,
+      'cables': true,
+      'system_unit': true,
     };
 
     if (raw is! Map) return defaults;
 
-    bool parseBool(dynamic v) {
-      if (v is bool) return v;
-      if (v is String) return v.toLowerCase() == 'true';
+    bool parseBool(dynamic value) {
+      if (value is bool) return value;
+      if (value is String) return value.toLowerCase() == 'true';
       return false;
     }
 
     final mapped = <String, bool>{};
 
     raw.forEach((key, value) {
-      final k = key.toString().toLowerCase().trim();
-      if (k == 'keyboard') mapped['Keyboard'] = parseBool(value);
-      if (k == 'mouse') mapped['Mouse'] = parseBool(value);
-      if (k == 'monitor') mapped['Monitor'] = parseBool(value);
-      if (k == 'cables' || k == 'cable') mapped['Cables'] = parseBool(value);
-      if (k == 'system_unit' || k == 'system unit') {
-        mapped['System Unit'] = parseBool(value);
-      }
+      mapped[key.toString().toLowerCase().trim()] = parseBool(value);
     });
 
     return {...defaults, ...mapped};
   }
 
-  Future<List<String>> _fetchLabs() async {
-    final snapshot = await FirebaseFirestore.instance.collection('pcs').get();
-
-    final labs = snapshot.docs
-        .map((e) => (e.data()['lab'] ?? '').toString())
-        .where((e) => e.isNotEmpty)
-        .toSet()
-        .toList();
-
-    labs.sort();
-    return labs;
+  int _extractPcNumber(String value) {
+    final match = RegExp(r'\d+').firstMatch(value);
+    return match == null ? 0 : int.tryParse(match.group(0)!) ?? 0;
   }
 
-  void _openPcHistory({
+  Future<void> _deletePcCompletely({
+    required String docId,
     required String lab,
     required String pcLabel,
     required String code,
-  }) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => PcHistoryPage(
-          lab: lab,
-          pcLabel: pcLabel,
-          code: code,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete PC'),
+        content: Text(
+          'Delete $pcLabel in room $lab?\n\nThis will also remove related reports and incident reports.',
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
       ),
-    );
+    ) ??
+        false;
+
+    if (!confirmed) return;
+
+    try {
+      await FirebaseFirestore.instance.collection('pcs').doc(docId).delete();
+
+      final reportsSnap = await FirebaseFirestore.instance
+          .collection('reports')
+          .where('pc_code', isEqualTo: code)
+          .get();
+
+      for (final doc in reportsSnap.docs) {
+        await doc.reference.delete();
+      }
+
+      final incidentSnap = await FirebaseFirestore.instance
+          .collection('incident_reports')
+          .where('pc_code', isEqualTo: code)
+          .get();
+
+      for (final doc in incidentSnap.docs) {
+        await doc.reference.delete();
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$pcLabel deleted successfully')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete PC: $e')),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme;
+    final labs = AppStateScope.of(context).labs;
+
+    if (_selectedLab != null && !labs.contains(_selectedLab)) {
+      _selectedLab = null;
+    }
 
     return WillPopScope(
       onWillPop: () async {
@@ -115,66 +147,36 @@ class _PcManagementPageState extends State<PcManagementPage> {
           ),
           bottom: const PreferredSize(
             preferredSize: Size.fromHeight(4),
-            child: SizedBox(
-              height: 4,
-              child: ColoredBox(color: Colors.amber),
-            ),
+            child: SizedBox(height: 4, child: ColoredBox(color: Colors.amber)),
           ),
         ),
         body: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              FutureBuilder<List<String>>(
-                future: _fetchLabs(),
-                builder: (context, snapshot) {
-                  final labs = snapshot.data ?? [];
-
-                  return Row(
-                    children: [
-                      ElevatedButton(
-                        onPressed: () {
-                          setState(() {
-                            _selectedLab = null;
-                          });
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.amber,
-                          foregroundColor: Colors.black,
-                        ),
-                        child: const Text('Change Room'),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          value: _selectedLab,
-                          decoration: const InputDecoration(
-                            labelText: 'Select Lab Room',
-                            border: OutlineInputBorder(),
-                          ),
-                          items: labs
-                              .map(
-                                (lab) => DropdownMenuItem(
-                              value: lab,
-                              child: Text(lab),
-                            ),
-                          )
-                              .toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              _selectedLab = value;
-                            });
-                          },
-                        ),
-                      ),
-                    ],
+              DropdownButtonFormField<String>(
+                value: _selectedLab,
+                decoration: const InputDecoration(
+                  labelText: 'Select Lab Room',
+                  border: OutlineInputBorder(),
+                ),
+                items: labs.map((lab) {
+                  return DropdownMenuItem<String>(
+                    value: lab,
+                    child: Text(lab),
                   );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedLab = value;
+                  });
                 },
               ),
               const SizedBox(height: 16),
               if (_selectedLab != null)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                   decoration: BoxDecoration(
                     color: Colors.amber,
                     borderRadius: BorderRadius.circular(8),
@@ -191,10 +193,7 @@ class _PcManagementPageState extends State<PcManagementPage> {
               Expanded(
                 child: _selectedLab == null
                     ? const Center(
-                  child: Text(
-                    'Select a lab to view PCs',
-                    style: TextStyle(fontSize: 16),
-                  ),
+                  child: Text('Select a lab to view PCs'),
                 )
                     : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                   stream: FirebaseFirestore.instance
@@ -204,41 +203,40 @@ class _PcManagementPageState extends State<PcManagementPage> {
                   builder: (context, snapshot) {
                     if (snapshot.hasError) {
                       return Center(
-                        child: Text(
-                          'Error: ${snapshot.error}',
-                          textAlign: TextAlign.center,
-                        ),
+                        child: Text('Error: ${snapshot.error}'),
                       );
                     }
 
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-
-                    final docs = snapshot.data?.docs ?? [];
-
-                    if (docs.isEmpty) {
+                    if (!snapshot.hasData) {
                       return const Center(
-                        child: Text(
-                          'No PCs found in this lab',
-                          style: TextStyle(fontSize: 16),
-                        ),
+                        child: CircularProgressIndicator(),
                       );
                     }
+
+                    final docs = snapshot.data!.docs.toList();
 
                     docs.sort((a, b) {
-                      final aPc = _extractPcNumber(a.data()['pc']);
-                      final bPc = _extractPcNumber(b.data()['pc']);
+                      final aPc =
+                      _extractPcNumber((a.data()['pc'] ?? '').toString());
+                      final bPc =
+                      _extractPcNumber((b.data()['pc'] ?? '').toString());
                       return aPc.compareTo(bPc);
                     });
 
+                    if (docs.isEmpty) {
+                      return const Center(
+                        child: Text('No PCs found in this lab'),
+                      );
+                    }
+
                     return GridView.builder(
                       itemCount: docs.length,
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 4,
-                        crossAxisSpacing: 20,
-                        mainAxisSpacing: 20,
-                        childAspectRatio: 0.95,
+                        crossAxisSpacing: 18,
+                        mainAxisSpacing: 18,
+                        childAspectRatio: 0.78,
                       ),
                       itemBuilder: (context, index) {
                         final doc = docs[index];
@@ -248,17 +246,25 @@ class _PcManagementPageState extends State<PcManagementPage> {
                         final pcLabel = (data['pc'] ?? 'PC').toString();
                         final code = (data['code'] ?? doc.id).toString();
                         final comment = (data['comment'] ?? '').toString();
-                        final reportedBy = (data['reported_by'] ?? '').toString();
-                        final peripherals = _normalizePeripherals(data['peripherals']);
-                        final hasProblem = peripherals.values.any((e) => e == false);
+                        final reportedBy =
+                        (data['reported_by'] ?? '').toString();
+
+                        final peripherals =
+                        _normalizePeripherals(data['peripherals']);
+                        final hasProblem =
+                        peripherals.values.any((v) => v == false);
 
                         return Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: hasProblem ? Colors.red.shade50 : Colors.white,
+                            color: hasProblem
+                                ? Colors.red.shade50
+                                : Colors.white,
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
-                              color: hasProblem ? Colors.red : Colors.black26,
+                              color: hasProblem
+                                  ? Colors.red
+                                  : Colors.black26,
                               width: hasProblem ? 2 : 1,
                             ),
                             boxShadow: const [
@@ -271,14 +277,11 @@ class _PcManagementPageState extends State<PcManagementPage> {
                           ),
                           child: Column(
                             children: [
-                              Align(
-                                alignment: Alignment.topLeft,
-                                child: Text(
-                                  pcLabel,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
+                              Text(
+                                pcLabel,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
                                 ),
                               ),
                               const SizedBox(height: 8),
@@ -289,65 +292,81 @@ class _PcManagementPageState extends State<PcManagementPage> {
                                   color: Colors.grey.shade200,
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: hasProblem ? Colors.red : Colors.black12,
+                                    color: hasProblem
+                                        ? Colors.red
+                                        : Colors.black12,
                                   ),
                                 ),
-                                child: const Icon(Icons.desktop_windows, size: 42),
+                                child: const Icon(
+                                  Icons.desktop_windows,
+                                  size: 42,
+                                ),
                               ),
                               const SizedBox(height: 8),
                               Expanded(
                                 child: Column(
-                                  children: peripherals.entries.map((entry) {
-                                    final ok = entry.value;
-                                    return Padding(
-                                      padding: const EdgeInsets.symmetric(vertical: 2),
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              entry.key,
-                                              style: const TextStyle(fontSize: 12),
-                                            ),
-                                          ),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 2,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: ok ? Colors.green : Colors.red,
-                                              borderRadius: BorderRadius.circular(999),
-                                            ),
-                                            child: Text(
-                                              ok ? 'Ok' : 'No',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  }).toList(),
+                                  children: [
+                                    _statusRow(
+                                      'Keyboard',
+                                      peripherals['keyboard'] ?? true,
+                                    ),
+                                    _statusRow(
+                                      'Mouse',
+                                      peripherals['mouse'] ?? true,
+                                    ),
+                                    _statusRow(
+                                      'Monitor',
+                                      peripherals['monitor'] ?? true,
+                                    ),
+                                    _statusRow(
+                                      'Cables',
+                                      peripherals['cables'] ?? true,
+                                    ),
+                                    _statusRow(
+                                      'System Unit',
+                                      peripherals['system_unit'] ?? true,
+                                    ),
+                                  ],
                                 ),
                               ),
                               const SizedBox(height: 6),
                               SizedBox(
                                 width: double.infinity,
                                 child: ElevatedButton(
-                                  onPressed: () => _openPcHistory(
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => PcHistoryPage(
+                                          lab: lab,
+                                          pcLabel: pcLabel,
+                                          code: code,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.amber,
+                                    foregroundColor: Colors.black,
+                                  ),
+                                  child: const Text('PC History'),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  onPressed: () => _deletePcCompletely(
+                                    docId: doc.id,
                                     lab: lab,
                                     pcLabel: pcLabel,
                                     code: code,
                                   ),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.amber,
-                                    foregroundColor: Colors.black,
-                                    minimumSize: const Size.fromHeight(36),
+                                    backgroundColor: Colors.red,
+                                    foregroundColor: Colors.white,
                                   ),
-                                  child: const Text('Pc History'),
+                                  child: const Text('Delete PC'),
                                 ),
                               ),
                               if (hasProblem) ...[
@@ -364,7 +383,23 @@ class _PcManagementPageState extends State<PcManagementPage> {
                                             lab: lab,
                                             pcLabel: pcLabel,
                                             code: code,
-                                            status: peripherals,
+                                            status: {
+                                              'Keyboard':
+                                              peripherals['keyboard'] ??
+                                                  true,
+                                              'Mouse':
+                                              peripherals['mouse'] ??
+                                                  true,
+                                              'Monitor':
+                                              peripherals['monitor'] ??
+                                                  true,
+                                              'Cables':
+                                              peripherals['cables'] ??
+                                                  true,
+                                              'System Unit': peripherals[
+                                              'system_unit'] ??
+                                                  true,
+                                            },
                                             comment: comment,
                                             reportedBy: reportedBy,
                                           ),
@@ -374,7 +409,6 @@ class _PcManagementPageState extends State<PcManagementPage> {
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.indigo,
                                       foregroundColor: Colors.white,
-                                      minimumSize: const Size.fromHeight(36),
                                     ),
                                     child: const Text('Open Problem'),
                                   ),
@@ -391,6 +425,37 @@ class _PcManagementPageState extends State<PcManagementPage> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _statusRow(String label, bool ok) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: ok ? Colors.green : Colors.red,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              ok ? 'Ok' : 'No',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

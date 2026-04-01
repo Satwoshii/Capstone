@@ -20,7 +20,7 @@ class PcHistoryPage extends StatelessWidget {
       final date = value.toDate();
       return '${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}/${date.year}';
     }
-    return '';
+    return 'No date';
   }
 
   @override
@@ -43,10 +43,7 @@ class PcHistoryPage extends StatelessWidget {
         ),
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(4),
-          child: SizedBox(
-            height: 4,
-            child: ColoredBox(color: Colors.amber),
-          ),
+          child: SizedBox(height: 4, child: ColoredBox(color: Colors.amber)),
         ),
       ),
       body: Padding(
@@ -58,56 +55,44 @@ class PcHistoryPage extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
                 color: Colors.amber,
-                child: Text(
-                  code,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
+                child: Text(code, style: const TextStyle(fontWeight: FontWeight.bold)),
               ),
             ),
             const SizedBox(height: 16),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: SizedBox(
-                width: 180,
-                child: TextFormField(
-                  initialValue: 'Keyboards',
-                  readOnly: true,
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
             Expanded(
               child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: FirebaseFirestore.instance
                     .collection('reports')
                     .where('pc_code', isEqualTo: code)
-                    .orderBy('created_at', descending: true)
                     .snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
                     return Center(child: Text('Error: ${snapshot.error}'));
                   }
 
-                  if (snapshot.connectionState == ConnectionState.waiting) {
+                  if (!snapshot.hasData) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
-                  final docs = snapshot.data?.docs ?? [];
+                  final docs = snapshot.data!.docs.toList();
+
+                  docs.sort((a, b) {
+                    final aTs = a.data()['timestamp'];
+                    final bTs = b.data()['timestamp'];
+
+                    final aDate = aTs is Timestamp ? aTs.toDate() : DateTime(2000);
+                    final bDate = bTs is Timestamp ? bTs.toDate() : DateTime(2000);
+
+                    return bDate.compareTo(aDate);
+                  });
 
                   if (docs.isEmpty) {
-                    return const Center(
-                      child: Text('No PC history records found.'),
-                    );
+                    return const Center(child: Text('No PC history records found.'));
                   }
 
                   return SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: DataTable(
-                      headingRowColor: MaterialStateProperty.all(Colors.grey.shade200),
                       columns: const [
                         DataColumn(label: Text('Date Reported')),
                         DataColumn(label: Text('Repaired By')),
@@ -116,17 +101,19 @@ class PcHistoryPage extends StatelessWidget {
                       ],
                       rows: docs.map((doc) {
                         final data = doc.data();
-                        final date = _formatDate(data['created_at']);
-                        final repairedBy = (data['repaired_by'] ?? '').toString();
-                        final issue = (data['comment'] ?? data['reported_issue'] ?? '').toString();
-                        final action = (data['action_taken'] ?? '').toString();
+
+                        final date = _formatDate(data['timestamp']);
+                        final repairedBy = (data['repaired_by'] ?? 'Not recorded').toString();
+                        final issue = (data['comment'] ?? 'No issue recorded').toString();
+                        final action =
+                        (data['action_taken'] ?? 'No action recorded').toString();
 
                         return DataRow(
                           cells: [
                             DataCell(Text(date)),
-                            DataCell(Text(repairedBy)),
-                            DataCell(SizedBox(width: 180, child: Text(issue))),
-                            DataCell(SizedBox(width: 320, child: Text(action))),
+                            DataCell(SizedBox(width: 140, child: Text(repairedBy))),
+                            DataCell(SizedBox(width: 200, child: Text(issue))),
+                            DataCell(SizedBox(width: 260, child: Text(action))),
                           ],
                         );
                       }).toList(),

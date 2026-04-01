@@ -1,5 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 import '../widgets/itso_drawer.dart';
 import 'pc_history.dart';
@@ -24,42 +27,66 @@ class ReportViewPage extends StatelessWidget {
     required this.reportedBy,
   });
 
-  Future<void> _markResolved(BuildContext context) async {
-    try {
-      await FirebaseFirestore.instance.collection('pcs').doc(docId).update({
-        'peripherals': {
-          'Keyboard': true,
-          'Mouse': true,
-          'Monitor': true,
-          'Cables': true,
-          'System Unit': true,
-        },
-        'comment': '',
-        'updated_at': FieldValue.serverTimestamp(),
-      });
+  Future<void> _deletePcCompletely(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete PC'),
+        content: Text(
+          'Delete $pcLabel in room $lab?\n\nThis will also remove related reports and incident reports.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    ) ??
+        false;
 
-      final pendingReports = await FirebaseFirestore.instance
+    if (!confirmed) return;
+
+    try {
+      await FirebaseFirestore.instance.collection('pcs').doc(docId).delete();
+
+      final reportsSnap = await FirebaseFirestore.instance
           .collection('reports')
           .where('pc_code', isEqualTo: code)
-          .where('status', isEqualTo: 'pending')
           .get();
 
-      for (final doc in pendingReports.docs) {
-        await doc.reference.update({
-          'status': 'resolved',
-          'updated_at': FieldValue.serverTimestamp(),
-        });
+      for (final doc in reportsSnap.docs) {
+        await doc.reference.delete();
+      }
+
+      final incidentSnap = await FirebaseFirestore.instance
+          .collection('incident_reports')
+          .where('pc_code', isEqualTo: code)
+          .get();
+
+      for (final doc in incidentSnap.docs) {
+        await doc.reference.delete();
       }
 
       if (!context.mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('PC problem marked as resolved.')),
+        SnackBar(content: Text('$pcLabel deleted successfully')),
       );
+
       Navigator.pop(context);
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to mark resolved: $e')),
+        SnackBar(content: Text('Failed to delete PC: $e')),
       );
     }
   }
@@ -81,19 +108,6 @@ class ReportViewPage extends StatelessWidget {
     );
   }
 
-  void _openPcHistory(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => PcHistoryPage(
-          lab: lab,
-          pcLabel: pcLabel,
-          code: code,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final scaffoldKey = GlobalKey<ScaffoldState>();
@@ -108,16 +122,10 @@ class ReportViewPage extends StatelessWidget {
           onPressed: () => scaffoldKey.currentState?.openDrawer(),
         ),
         backgroundColor: color.primary,
-        title: const Text(
-          'ITSO View',
-          style: TextStyle(color: Colors.white),
-        ),
+        title: const Text('ITSO View', style: TextStyle(color: Colors.white)),
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(4),
-          child: SizedBox(
-            height: 4,
-            child: ColoredBox(color: Colors.amber),
-          ),
+          child: SizedBox(height: 4, child: ColoredBox(color: Colors.amber)),
         ),
       ),
       body: Padding(
@@ -132,10 +140,7 @@ class ReportViewPage extends StatelessWidget {
               ),
               child: Text(
                 'Lab: $lab',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 22,
-                ),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
               ),
             ),
             const SizedBox(height: 24),
@@ -155,11 +160,7 @@ class ReportViewPage extends StatelessWidget {
                       children: [
                         Text(pcLabel),
                         const SizedBox(height: 12),
-                        Container(
-                          width: 60,
-                          height: 60,
-                          color: Colors.white,
-                        ),
+                        Container(width: 60, height: 60, color: Colors.white),
                       ],
                     ),
                   ),
@@ -218,9 +219,7 @@ class ReportViewPage extends StatelessWidget {
                           const SizedBox(height: 10),
                           Text(comment.isEmpty ? 'No comment' : comment),
                           const SizedBox(height: 12),
-                          Text(
-                            'Reported by: ${reportedBy.isEmpty ? "Unknown" : reportedBy}',
-                          ),
+                          Text('Reported by: ${reportedBy.isEmpty ? "Unknown" : reportedBy}'),
                           const SizedBox(height: 12),
                           Text('PC Code: $code'),
                           const Spacer(),
@@ -238,21 +237,32 @@ class ReportViewPage extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 10),
                                 ElevatedButton(
-                                  onPressed: () => _openPcHistory(context),
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => PcHistoryPage(
+                                          lab: lab,
+                                          pcLabel: pcLabel,
+                                          code: code,
+                                        ),
+                                      ),
+                                    );
+                                  },
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.amber,
                                     foregroundColor: Colors.black,
                                   ),
-                                  child: const Text('View Pc History'),
+                                  child: const Text('View PC History'),
                                 ),
                                 const SizedBox(height: 10),
                                 ElevatedButton(
-                                  onPressed: () => _markResolved(context),
+                                  onPressed: () => _deletePcCompletely(context),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.amber,
-                                    foregroundColor: Colors.black,
+                                    backgroundColor: Colors.red,
+                                    foregroundColor: Colors.white,
                                   ),
-                                  child: const Text('Mark Resolved'),
+                                  child: const Text('Delete PC'),
                                 ),
                               ],
                             ),
@@ -300,11 +310,14 @@ class _IncidentReportPageState extends State<IncidentReportPage> {
   final _locationCtrl = TextEditingController();
   final _narrativeCtrl = TextEditingController();
   final _actionCtrl = TextEditingController();
+  final _repairedByCtrl = TextEditingController();
+
   bool _saving = false;
 
   @override
   void initState() {
     super.initState();
+
     final broken = widget.status.entries
         .where((entry) => entry.value == false)
         .map((entry) => entry.key)
@@ -315,6 +328,8 @@ class _IncidentReportPageState extends State<IncidentReportPage> {
     _narrativeCtrl.text = widget.existingComment.isEmpty
         ? 'Reported issue on ${widget.pcLabel}.'
         : widget.existingComment;
+    _repairedByCtrl.text =
+    widget.reportedBy.isEmpty ? 'ITSO Staff' : widget.reportedBy;
   }
 
   @override
@@ -323,7 +338,78 @@ class _IncidentReportPageState extends State<IncidentReportPage> {
     _locationCtrl.dispose();
     _narrativeCtrl.dispose();
     _actionCtrl.dispose();
+    _repairedByCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _writeAuditLog({
+    required String action,
+    required String details,
+  }) async {
+    await FirebaseFirestore.instance.collection('audit_logs').add({
+      'action': action,
+      'details': details,
+      'pc': widget.pcLabel,
+      'pc_code': widget.code,
+      'lab': widget.lab,
+      'user': _repairedByCtrl.text.trim().isEmpty
+          ? 'ITSO Staff'
+          : _repairedByCtrl.text.trim(),
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> _printPdf({
+    required String repairedBy,
+    required String actionTaken,
+  }) async {
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.Page(
+        build: (context) {
+          return pw.Padding(
+            padding: const pw.EdgeInsets.all(24),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Center(
+                  child: pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    color: PdfColor.fromHex('#F4C400'),
+                    child: pw.Text(
+                      'Incident Report',
+                      style: pw.TextStyle(
+                        fontSize: 16,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                pw.SizedBox(height: 24),
+                pw.Text('Type Of Incident: ${_typeCtrl.text.trim()}'),
+                pw.SizedBox(height: 10),
+                pw.Text('Exact Location Of Incident: ${_locationCtrl.text.trim()}'),
+                pw.SizedBox(height: 10),
+                pw.Text('Narrative Details Of Incident: ${_narrativeCtrl.text.trim()}'),
+                pw.SizedBox(height: 10),
+                pw.Text('Repaired By: $repairedBy'),
+                pw.SizedBox(height: 10),
+                pw.Text('Actions Taken: $actionTaken'),
+                pw.SizedBox(height: 18),
+                pw.Text('Lab: ${widget.lab}'),
+                pw.Text('PC: ${widget.pcLabel}'),
+                pw.Text('PC Code: ${widget.code}'),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (format) async => pdf.save(),
+    );
   }
 
   Future<void> _saveIncidentReport() async {
@@ -331,9 +417,11 @@ class _IncidentReportPageState extends State<IncidentReportPage> {
 
     if (_typeCtrl.text.trim().isEmpty ||
         _locationCtrl.text.trim().isEmpty ||
-        _narrativeCtrl.text.trim().isEmpty) {
+        _narrativeCtrl.text.trim().isEmpty ||
+        _actionCtrl.text.trim().isEmpty ||
+        _repairedByCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in the incident report fields.')),
+        const SnackBar(content: Text('Please fill in all incident report fields.')),
       );
       return;
     }
@@ -341,35 +429,62 @@ class _IncidentReportPageState extends State<IncidentReportPage> {
     setState(() => _saving = true);
 
     try {
-      final reportRef = await FirebaseFirestore.instance.collection('incident_reports').add({
+      final repairedBy = _repairedByCtrl.text.trim();
+      final actionTaken = _actionCtrl.text.trim();
+
+      final reportRef =
+      await FirebaseFirestore.instance.collection('incident_reports').add({
         'pc_doc_id': widget.docId,
         'pc_code': widget.code,
         'lab': widget.lab,
         'pc': widget.pcLabel,
         'reported_by': widget.reportedBy,
+        'repaired_by': repairedBy,
         'type_of_incident': _typeCtrl.text.trim(),
         'exact_location': _locationCtrl.text.trim(),
         'narrative_details': _narrativeCtrl.text.trim(),
-        'action_taken': _actionCtrl.text.trim(),
+        'action_taken': actionTaken,
         'peripherals': widget.status,
         'created_at': FieldValue.serverTimestamp(),
         'source': 'itso',
       });
 
-      final pendingReports = await FirebaseFirestore.instance
+      final matchedReports = await FirebaseFirestore.instance
           .collection('reports')
           .where('pc_code', isEqualTo: widget.code)
-          .where('status', isEqualTo: 'pending')
           .get();
 
-      for (final doc in pendingReports.docs) {
+      for (final doc in matchedReports.docs) {
         await doc.reference.update({
-          'action_taken': _actionCtrl.text.trim(),
-          'repaired_by': widget.reportedBy,
+          'action_taken': actionTaken,
+          'repaired_by': repairedBy,
+          'status': 'resolved',
+          'resolved_at': FieldValue.serverTimestamp(),
           'incident_report_id': reportRef.id,
-          'updated_at': FieldValue.serverTimestamp(),
         });
       }
+
+      await FirebaseFirestore.instance.collection('pcs').doc(widget.docId).update({
+        'peripherals': {
+          'keyboard': true,
+          'mouse': true,
+          'monitor': true,
+          'cables': true,
+          'system_unit': true,
+        },
+        'comment': '',
+        'updated_at': FieldValue.serverTimestamp(),
+      });
+
+      await _writeAuditLog(
+        action: 'Incident report created',
+        details: 'Incident report saved and PC marked resolved.',
+      );
+
+      await _printPdf(
+        repairedBy: repairedBy,
+        actionTaken: actionTaken,
+      );
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -387,11 +502,11 @@ class _IncidentReportPageState extends State<IncidentReportPage> {
   }
 
   InputDecoration _fieldDecoration() {
-    return InputDecoration(
+    return const InputDecoration(
       isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(0),
+        borderRadius: BorderRadius.zero,
       ),
     );
   }
@@ -410,22 +525,16 @@ class _IncidentReportPageState extends State<IncidentReportPage> {
           onPressed: () => scaffoldKey.currentState?.openDrawer(),
         ),
         backgroundColor: color.primary,
-        title: const Text(
-          'ITSO View',
-          style: TextStyle(color: Colors.white),
-        ),
+        title: const Text('ITSO View', style: TextStyle(color: Colors.white)),
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(4),
-          child: SizedBox(
-            height: 4,
-            child: ColoredBox(color: Colors.amber),
-          ),
+          child: SizedBox(height: 4, child: ColoredBox(color: Colors.amber)),
         ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 760),
+        child: SizedBox(
+          width: 760,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -457,7 +566,10 @@ class _IncidentReportPageState extends State<IncidentReportPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Exact Location Of Incident:', style: TextStyle(fontSize: 12)),
+                        const Text(
+                          'Exact Location Of Incident:',
+                          style: TextStyle(fontSize: 12),
+                        ),
                         const SizedBox(height: 6),
                         TextField(
                           controller: _locationCtrl,
@@ -471,7 +583,10 @@ class _IncidentReportPageState extends State<IncidentReportPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Narrative Details Of Incident:', style: TextStyle(fontSize: 12)),
+                        const Text(
+                          'Narrative Details Of Incident:',
+                          style: TextStyle(fontSize: 12),
+                        ),
                         const SizedBox(height: 6),
                         TextField(
                           controller: _narrativeCtrl,
@@ -481,6 +596,16 @@ class _IncidentReportPageState extends State<IncidentReportPage> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 14),
+              const Text('Repaired By:', style: TextStyle(fontSize: 12)),
+              const SizedBox(height: 6),
+              SizedBox(
+                width: 220,
+                child: TextField(
+                  controller: _repairedByCtrl,
+                  decoration: _fieldDecoration(),
+                ),
               ),
               const SizedBox(height: 14),
               const Text('Actions Taken:', style: TextStyle(fontSize: 12)),
