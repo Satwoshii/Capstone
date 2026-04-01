@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../landingITso.dart';
 import '../widgets/itso_drawer.dart';
+import 'pc_history.dart';
 import 'reportView.dart';
 
 class PcManagementPage extends StatefulWidget {
@@ -45,7 +46,6 @@ class _PcManagementPageState extends State<PcManagementPage> {
 
     raw.forEach((key, value) {
       final k = key.toString().toLowerCase().trim();
-
       if (k == 'keyboard') mapped['Keyboard'] = parseBool(value);
       if (k == 'mouse') mapped['Mouse'] = parseBool(value);
       if (k == 'monitor') mapped['Monitor'] = parseBool(value);
@@ -55,10 +55,7 @@ class _PcManagementPageState extends State<PcManagementPage> {
       }
     });
 
-    return {
-      ...defaults,
-      ...mapped,
-    };
+    return {...defaults, ...mapped};
   }
 
   Future<List<String>> _fetchLabs() async {
@@ -72,6 +69,23 @@ class _PcManagementPageState extends State<PcManagementPage> {
 
     labs.sort();
     return labs;
+  }
+
+  void _openPcHistory({
+    required String lab,
+    required String pcLabel,
+    required String code,
+  }) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PcHistoryPage(
+          lab: lab,
+          pcLabel: pcLabel,
+          code: code,
+        ),
+      ),
+    );
   }
 
   @override
@@ -160,8 +174,7 @@ class _PcManagementPageState extends State<PcManagementPage> {
               const SizedBox(height: 16),
               if (_selectedLab != null)
                 Container(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                   decoration: BoxDecoration(
                     color: Colors.amber,
                     borderRadius: BorderRadius.circular(8),
@@ -198,11 +211,8 @@ class _PcManagementPageState extends State<PcManagementPage> {
                       );
                     }
 
-                    if (snapshot.connectionState ==
-                        ConnectionState.waiting) {
-                      return const Center(
-                        child: CircularProgressIndicator(),
-                      );
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
                     }
 
                     final docs = snapshot.data?.docs ?? [];
@@ -224,12 +234,11 @@ class _PcManagementPageState extends State<PcManagementPage> {
 
                     return GridView.builder(
                       itemCount: docs.length,
-                      gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 4,
                         crossAxisSpacing: 20,
                         mainAxisSpacing: 20,
-                        childAspectRatio: 0.9,
+                        childAspectRatio: 0.95,
                       ),
                       itemBuilder: (context, index) {
                         final doc = docs[index];
@@ -237,82 +246,141 @@ class _PcManagementPageState extends State<PcManagementPage> {
 
                         final lab = (data['lab'] ?? '').toString();
                         final pcLabel = (data['pc'] ?? 'PC').toString();
-                        final code =
-                        (data['code'] ?? doc.id).toString();
-                        final comment =
-                        (data['comment'] ?? '').toString();
-                        final reportedBy =
-                        (data['reported_by'] ?? '').toString();
-                        final peripherals =
-                        _normalizePeripherals(data['peripherals']);
+                        final code = (data['code'] ?? doc.id).toString();
+                        final comment = (data['comment'] ?? '').toString();
+                        final reportedBy = (data['reported_by'] ?? '').toString();
+                        final peripherals = _normalizePeripherals(data['peripherals']);
+                        final hasProblem = peripherals.values.any((e) => e == false);
 
-                        final hasProblem =
-                        peripherals.values.any((e) => e == false);
-
-                        return InkWell(
-                          onTap: hasProblem
-                              ? () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => ReportViewPage(
-                                  docId: doc.id,
-                                  lab: lab,
-                                  pcLabel: pcLabel,
-                                  code: code,
-                                  status: peripherals,
-                                  comment: comment,
-                                  reportedBy: reportedBy,
-                                ),
-                              ),
-                            );
-                          }
-                              : null,
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade300,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: hasProblem
-                                    ? Colors.red
-                                    : Colors.transparent,
-                                width: 2,
-                              ),
+                        return Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: hasProblem ? Colors.red.shade50 : Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: hasProblem ? Colors.red : Colors.black26,
+                              width: hasProblem ? 2 : 1,
                             ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x11000000),
+                                blurRadius: 6,
+                                offset: Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              Align(
+                                alignment: Alignment.topLeft,
+                                child: Text(
                                   pcLabel,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                                const SizedBox(height: 8),
-                                Container(
-                                  width: 42,
-                                  height: 42,
-                                  color: Colors.white,
-                                ),
-                                const SizedBox(height: 10),
-                                const Text(
-                                  'Mouse\nKeyboard\nMonitor',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontSize: 10),
-                                ),
-                                const SizedBox(height: 8),
-                                if (hasProblem)
-                                  const Text(
-                                    'Peripheral Problem',
-                                    style: TextStyle(
-                                      color: Colors.red,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 10,
-                                    ),
-                                    textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
                                   ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                height: 70,
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade200,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: hasProblem ? Colors.red : Colors.black12,
+                                  ),
+                                ),
+                                child: const Icon(Icons.desktop_windows, size: 42),
+                              ),
+                              const SizedBox(height: 8),
+                              Expanded(
+                                child: Column(
+                                  children: peripherals.entries.map((entry) {
+                                    final ok = entry.value;
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 2),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              entry.key,
+                                              style: const TextStyle(fontSize: 12),
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: ok ? Colors.green : Colors.red,
+                                              borderRadius: BorderRadius.circular(999),
+                                            ),
+                                            child: Text(
+                                              ok ? 'Ok' : 'No',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  onPressed: () => _openPcHistory(
+                                    lab: lab,
+                                    pcLabel: pcLabel,
+                                    code: code,
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.amber,
+                                    foregroundColor: Colors.black,
+                                    minimumSize: const Size.fromHeight(36),
+                                  ),
+                                  child: const Text('Pc History'),
+                                ),
+                              ),
+                              if (hasProblem) ...[
+                                const SizedBox(height: 8),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => ReportViewPage(
+                                            docId: doc.id,
+                                            lab: lab,
+                                            pcLabel: pcLabel,
+                                            code: code,
+                                            status: peripherals,
+                                            comment: comment,
+                                            reportedBy: reportedBy,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.indigo,
+                                      foregroundColor: Colors.white,
+                                      minimumSize: const Size.fromHeight(36),
+                                    ),
+                                    child: const Text('Open Problem'),
+                                  ),
+                                ),
                               ],
-                            ),
+                            ],
                           ),
                         );
                       },
