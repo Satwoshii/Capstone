@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 
+// Teacher
+import 'Teachers/teacherapp/login/screens/login_screen.dart';
+
 // ITSO
 import 'ITSO/landingITso.dart';
 import 'ITSO/app_state.dart';
@@ -20,12 +23,12 @@ void main() async {
 
   await Firebase.initializeApp(
     options: const FirebaseOptions(
-        apiKey: "AIzaSyCR9Te0R8AsllbmoeHNpMt-V5OavM2EHe4",
-        authDomain: "test-1fc5d.firebaseapp.com",
-        projectId: "test-1fc5d",
-        storageBucket: "test-1fc5d.firebasestorage.app",
-        messagingSenderId: "340469481850",
-        appId: "1:340469481850:web:449bdbdf2c9f49f82216c3",
+      apiKey: "AIzaSyCR9Te0R8AsllbmoeHNpMt-V5OavM2EHe4",
+      authDomain: "test-1fc5d.firebaseapp.com",
+      projectId: "test-1fc5d",
+      storageBucket: "test-1fc5d.firebasestorage.app",
+      messagingSenderId: "340469481850",
+      appId: "1:340469481850:web:449bdbdf2c9f49f82216c3",
     ),
   );
 
@@ -79,11 +82,26 @@ class _RootAppState extends State<RootApp> {
     }
 
     if (_url.contains('studentapp')) {
-      return MainApp();
+      return const MainApp();
+    } else if (_url.contains('teacherapp')) {
+      return const TeacherApp();
     } else if (_url.contains('itsoadmin')) {
       return MyApp(appState: _itsoState!);
     } else {
-      return Webstudent();
+      return const Webstudent();
     }
+  }
+}
+
+class TeacherApp extends StatelessWidget {
+  const TeacherApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Teacher App',
+      home: const TeacherLoginScreen(),
+    );
   }
 }
