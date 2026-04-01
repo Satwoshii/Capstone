@@ -47,7 +47,7 @@ dependencies:
   cloud_firestore: ^6.0.1
   pdf: ^3.11.1
   printing: ^5.13.4
-
+  path_provider: ^2.1.4
 
 
 dev_dependencies:
