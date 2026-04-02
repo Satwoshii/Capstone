@@ -42,10 +42,8 @@ class _StudentReportFormPageState extends State<StudentReportFormPage> {
 
   Future<void> _loadPcData() async {
     try {
-      // 1. Check if code was passed directly via constructor
       String? code = widget.pcCode;
 
-      // 2. If not, check the URL (Web deep link)
       if (code == null || code.isEmpty) {
         final uri = Uri.base;
         code = uri.queryParameters['code'];
@@ -116,6 +114,17 @@ class _StudentReportFormPageState extends State<StudentReportFormPage> {
         'status': 'pending',
       });
 
+      await FirebaseFirestore.instance.collection('attendance').add({
+        'student_email': _emailCtrl.text.trim(),
+        'lab': _lab ?? '',
+        'pc': _pcLabel ?? '',
+        'present': 1.0,
+        'late': 0.0,
+        'attendance_score': 1.0,
+        'date': DateTime.now().toString().split(' ')[0],
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+
       await FirebaseFirestore.instance.collection('pcs').doc(_pcCode).update({
         'status': hasProblem ? 'problem' : 'available',
         'comment': _commentCtrl.text.trim(),
@@ -137,7 +146,9 @@ class _StudentReportFormPageState extends State<StudentReportFormPage> {
         _cablesOk = true;
         _systemUnitOk = true;
       });
+
       _commentCtrl.clear();
+      _emailCtrl.clear();
     } catch (e) {
       if (!mounted) return;
 
@@ -194,7 +205,7 @@ class _StudentReportFormPageState extends State<StudentReportFormPage> {
               ElevatedButton(
                 onPressed: () => Navigator.pop(context),
                 child: const Text('Go Back'),
-              )
+              ),
             ],
           ),
         ),
@@ -238,7 +249,21 @@ class _StudentReportFormPageState extends State<StudentReportFormPage> {
                         ),
                         const SizedBox(height: 20),
 
+                        TextFormField(
+                          controller: _emailCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Student Email',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Please enter your email';
+                            }
+                            return null;
+                          },
+                        ),
                         const SizedBox(height: 16),
+
                         _statusSwitch(
                           title: 'Mouse OK',
                           value: _mouseOk,
@@ -265,6 +290,7 @@ class _StudentReportFormPageState extends State<StudentReportFormPage> {
                           onChanged: (v) => setState(() => _systemUnitOk = v),
                         ),
                         const SizedBox(height: 16),
+
                         TextFormField(
                           controller: _commentCtrl,
                           maxLines: 4,
@@ -288,6 +314,7 @@ class _StudentReportFormPageState extends State<StudentReportFormPage> {
                           },
                         ),
                         const SizedBox(height: 20),
+
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(

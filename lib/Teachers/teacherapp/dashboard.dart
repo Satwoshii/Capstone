@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'attendance.dart';
 import 'lab_map.dart';
+import 'report_form.dart';
+import 'schedule.dart';
 
 class TeacherDashboard extends StatefulWidget {
   const TeacherDashboard({super.key});
@@ -76,9 +78,9 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                       runSpacing: 14,
                       children: const [
                         _StatCard(title: "Today's Classes", value: "3"),
-                        _StatCard(title: "Lab Rooms", value: "2"),
-                        _StatCard(title: "Attendance", value: "42"),
-                        _StatCard(title: "Schedules", value: "5"),
+                        _StatCard(title: "Lab Rooms", value: "6"),
+                        _StatCard(title: "Attendance", value: "40"),
+                        _StatCard(title: "Schedules", value: "0"),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -295,7 +297,7 @@ class _TeacherDrawer extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => const ReportToITSOPage(),
+                      builder: (_) => const TeacherReportFormPage(),
                     ),
                   );
                 },
@@ -498,50 +500,6 @@ class _ActionButton extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class SchedulePage extends StatelessWidget {
-  const SchedulePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Schedule"),
-      ),
-      body: const Center(
-        child: Text(
-          "Schedule Page",
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class ReportToITSOPage extends StatelessWidget {
-  const ReportToITSOPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Report to ITSO"),
-      ),
-      body: const Center(
-        child: Text(
-          "Report to ITSO Page",
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
         ),
       ),
     );
