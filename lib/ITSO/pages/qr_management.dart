@@ -47,7 +47,6 @@ class _QrManagementPageState extends State<QrManagementPage> {
     return int.tryParse(match.group(0)!) ?? 0;
   }
 
-  // KEEP OLD UNIQUE CODE STYLE
   String _generateUniqueCode(String lab, String pc) {
     final rand = DateTime.now()
         .millisecondsSinceEpoch
@@ -175,9 +174,8 @@ class _QrManagementPageState extends State<QrManagementPage> {
         setState(() {
           _pcLabel = 'PC $pc';
           _uniqueCode = existingCode;
-          _qrData = existingQrData.isNotEmpty
-              ? existingQrData
-              : _buildQrUrl(existingCode);
+          _qrData =
+          existingQrData.isNotEmpty ? existingQrData : _buildQrUrl(existingCode);
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -277,8 +275,7 @@ class _QrManagementPageState extends State<QrManagementPage> {
         final uniqueCode = _generateUniqueCode(lab, '$i');
         final url = _buildQrUrl(uniqueCode);
 
-        final docRef =
-        FirebaseFirestore.instance.collection('pcs').doc(uniqueCode);
+        final docRef = FirebaseFirestore.instance.collection('pcs').doc(uniqueCode);
 
         batch.set(docRef, {
           'lab': lab,
@@ -701,7 +698,8 @@ body {
                       const Text("Select Lab Room"),
                       const SizedBox(height: 6),
                       DropdownButtonFormField<String>(
-                        value: app.labs.contains(_selectedLab) ? _selectedLab : null,
+                        value:
+                        app.labs.contains(_selectedLab) ? _selectedLab : null,
                         items: app.labs
                             .map(
                               (lab) => DropdownMenuItem(
@@ -931,7 +929,7 @@ body {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Saved QR Codes',
+                      'Saved QR Codes by Room',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 18,
@@ -940,7 +938,9 @@ body {
                     const SizedBox(height: 12),
                     Expanded(
                       child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                        stream: FirebaseFirestore.instance.collection('pcs').snapshots(),
+                        stream: FirebaseFirestore.instance
+                            .collection('pcs')
+                            .snapshots(),
                         builder: (context, snapshot) {
                           if (snapshot.hasError) {
                             return Center(
@@ -975,26 +975,70 @@ body {
                             return aPc.compareTo(bPc);
                           });
 
-                          return ListView.separated(
-                            itemCount: docs.length,
-                            separatorBuilder: (_, __) => const Divider(),
-                            itemBuilder: (context, index) {
-                              final data = docs[index].data();
-                              final lab = (data['lab'] ?? '').toString();
-                              final pc = (data['pc'] ?? '').toString();
-                              final code = (data['code'] ?? '').toString();
+                          final Map<String,
+                              List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+                          grouped = {};
 
-                              return ListTile(
-                                leading: const Icon(Icons.qr_code),
-                                title: Text('$lab - $pc'),
-                                subtitle: Text(code),
-                                trailing: ElevatedButton(
-                                  onPressed: () => _loadSavedQr(data),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.amber,
-                                    foregroundColor: Colors.black,
+                          for (final doc in docs) {
+                            final lab =
+                            (doc.data()['lab'] ?? 'Unknown Room').toString();
+                            grouped.putIfAbsent(lab, () => []).add(doc);
+                          }
+
+                          final roomNames = grouped.keys.toList()..sort();
+
+                          return ListView.builder(
+                            itemCount: roomNames.length,
+                            itemBuilder: (context, roomIndex) {
+                              final room = roomNames[roomIndex];
+                              final roomDocs = grouped[room]!;
+
+                              roomDocs.sort((a, b) {
+                                final aPc = _extractPcNumber(
+                                    (a.data()['pc'] ?? '').toString());
+                                final bPc = _extractPcNumber(
+                                    (b.data()['pc'] ?? '').toString());
+                                return aPc.compareTo(bPc);
+                              });
+
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                elevation: 2,
+                                child: ExpansionTile(
+                                  initiallyExpanded: true,
+                                  leading: const Icon(Icons.meeting_room),
+                                  title: Text(
+                                    room,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
                                   ),
-                                  child: const Text('Load'),
+                                  subtitle: Text('${roomDocs.length} PC(s)'),
+                                  children: roomDocs.map((doc) {
+                                    final data = doc.data();
+                                    final pc = (data['pc'] ?? '').toString();
+                                    final code = (data['code'] ?? '').toString();
+
+                                    return Column(
+                                      children: [
+                                        ListTile(
+                                          leading: const Icon(Icons.qr_code),
+                                          title: Text(pc),
+                                          subtitle: Text(code),
+                                          trailing: ElevatedButton(
+                                            onPressed: () => _loadSavedQr(data),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.amber,
+                                              foregroundColor: Colors.black,
+                                            ),
+                                            child: const Text('Load'),
+                                          ),
+                                        ),
+                                        const Divider(height: 1),
+                                      ],
+                                    );
+                                  }).toList(),
                                 ),
                               );
                             },

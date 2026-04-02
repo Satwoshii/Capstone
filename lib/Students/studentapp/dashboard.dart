@@ -1,61 +1,167 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-// Import the QR scanning screen for navigation
-import 'qr_scan.dart';
-import 'report_page.dart';
+
 import 'login/screens/login_screen.dart';
+import '../studentvw_pages/report_form.dart';
+import 'report_page.dart';
 
-// Dashboard is the main screen of the application after logging in.
-class Dashboard extends StatelessWidget {
+class Dashboard extends StatefulWidget {
+  const Dashboard({super.key});
 
-  // Method to clear the session and redirect to the login screen
+  @override
+  State<Dashboard> createState() => _DashboardState();
+}
+
+class _DashboardState extends State<Dashboard> {
+  bool scanLocked = false;
+  final TextEditingController uniqueCodeController = TextEditingController();
+
   Future<void> _logout(BuildContext context) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.remove("token"); // Remove the token from local storage
-    
-    if (context.mounted) {
-      // Clear navigation history and send the user back to the LoginScreen
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-        (route) => false,
-      );
+    await prefs.remove("token");
+
+    if (!context.mounted) return;
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+    );
+  }
+
+  String? parsePC(String qrData) {
+    try {
+      final uri = Uri.parse(qrData);
+
+      final String? code = uri.queryParameters['code'];
+
+      if (code == null && !qrData.contains('://')) {
+        return qrData.trim();
+      }
+
+      if (code != null && code.isNotEmpty) {
+        return code.trim();
+      }
+    } catch (_) {
+      if (qrData.trim().isNotEmpty) {
+        return qrData.trim();
+      }
     }
+    return null;
+  }
+
+  void navigateToReport(String scannedPC) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => StudentReportFormPage(pcCode: scannedPC),
+      ),
+    ).then((_) {
+      if (mounted) {
+        setState(() {
+          scanLocked = false;
+        });
+      }
+    });
+  }
+
+  void _openUniqueCodeDialog() {
+    uniqueCodeController.clear();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Enter Unique Code"),
+          content: TextField(
+            controller: uniqueCodeController,
+            autofocus: true,
+            decoration: const InputDecoration(
+              hintText: "Enter code here",
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final code = uniqueCodeController.text.trim();
+
+                if (code.isEmpty) {
+                  ScaffoldMessenger.of(this.context).showSnackBar(
+                    const SnackBar(content: Text("Please enter a unique code")),
+                  );
+                  return;
+                }
+
+                Navigator.pop(context);
+                navigateToReport(code);
+              },
+              child: const Text("Proceed"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    uniqueCodeController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // --- DESIGN: APP BAR ---
-      appBar: AppBar(title: const Text("Dashboard")),
-
-      // --- DESIGN: SIDE DRAWER ---
+      appBar: AppBar(
+        title: const Text("QR Scanner"),
+      ),
       drawer: Drawer(
         child: ListView(
           children: [
-            // Side menu Header
             const DrawerHeader(
               decoration: BoxDecoration(color: Colors.blue),
               child: Text(
                 "Menu",
-                style: TextStyle(color: Colors.white, fontSize: 24),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                ),
               ),
             ),
-
-            // Navigation Links
+            ListTile(
+              leading: const Icon(Icons.qr_code_scanner),
+              title: const Text("Scan QR"),
+              onTap: () {
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.password),
+              title: const Text("Enter Unique Code"),
+              onTap: () {
+                Navigator.pop(context);
+                _openUniqueCodeDialog();
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.support_agent),
               title: const Text("Contact ITSO"),
               onTap: () {
+                Navigator.pop(context);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const ReportPage(),
+                    builder: (_) => const ReportPage(),
                   ),
                 );
               },
             ),
-
             ListTile(
               leading: const Icon(Icons.logout),
               title: const Text("Logout"),
@@ -64,31 +170,105 @@ class Dashboard extends StatelessWidget {
           ],
         ),
       ),
-
-      // --- DESIGN: MAIN CONTENT AREA ---
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              "Welcome to the QR Monitoring System",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      body: Stack(
+        children: [
+          MobileScanner(
+            controller: MobileScannerController(
+              detectionSpeed: DetectionSpeed.noDuplicates,
             ),
-            
-            const SizedBox(height: 20),
+            onDetect: (BarcodeCapture capture) {
+              if (scanLocked) return;
 
-            ElevatedButton.icon(
-              icon: const Icon(Icons.qr_code_scanner),
-              label: const Text("Scan QR Code"),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => QRScanner()),
-                );
-              },
+              for (final barcode in capture.barcodes) {
+                final raw = barcode.rawValue;
+
+                if (raw != null) {
+                  scanLocked = true;
+                  final parsedCode = parsePC(raw);
+
+                  if (parsedCode != null) {
+                    navigateToReport(parsedCode);
+                  } else {
+                    showDialog(
+                      context: context,
+                      builder: (_) => AlertDialog(
+                        title: const Text(
+                          "Invalid QR",
+                          style: TextStyle(color: Colors.red),
+                        ),
+                        content: const Text(
+                          "This QR code is not recognized by the system.",
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              if (mounted) {
+                                setState(() {
+                                  scanLocked = false;
+                                });
+                              }
+                            },
+                            child: const Text("OK"),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  break;
+                }
+              }
+            },
+          ),
+
+          Center(
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.amber, width: 4),
+                borderRadius: BorderRadius.circular(14),
+              ),
             ),
-          ],
-        ),
+          ),
+
+          const Positioned(
+            bottom: 120,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Text(
+                "Align QR code within the frame",
+                style: TextStyle(
+                  color: Colors.white,
+                  backgroundColor: Colors.black54,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+
+          Positioned(
+            bottom: 40,
+            left: 20,
+            right: 20,
+            child: SizedBox(
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: _openUniqueCodeDialog,
+                icon: const Icon(Icons.password),
+                label: const Text("Enter Unique Code"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.amber,
+                  foregroundColor: Colors.black,
+                  textStyle: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
