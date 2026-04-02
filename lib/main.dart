@@ -83,7 +83,7 @@ class _RootAppState extends State<RootApp> {
 //added url for teacher
     if (_url.contains('studentapp')) {
       return const MainApp();
-    } else if (_url.contains('teacherapp')) {
+    } else if (_url.contains('teacherweb')) {
       return const TeacherApp();
     } else if (_url.contains('itsoadmin')) {
       return MyApp(appState: _itsoState!);
