@@ -18,6 +18,8 @@ class _LabMapPageState extends State<LabMapPage> {
   Map<String, dynamic>? selectedPcData;
   String? selectedPcDocId;
 
+  final Map<String, Map<String, dynamic>> docsByPc = {};
+
   String formatTimestamp(dynamic timestamp) {
     if (timestamp == null) return 'N/A';
 
@@ -26,6 +28,7 @@ class _LabMapPageState extends State<LabMapPage> {
       final hour = dt.hour.toString().padLeft(2, '0');
       final minute = dt.minute.toString().padLeft(2, '0');
       final second = dt.second.toString().padLeft(2, '0');
+
       return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
           '$hour:$minute:$second';
     }
@@ -33,38 +36,97 @@ class _LabMapPageState extends State<LabMapPage> {
     return timestamp.toString();
   }
 
-  void onPcTap(String pcName, Map<String, dynamic>? data, String? docId) {
+  Future<void> loadPcsForSelectedRoom() async {
+    final allDocs = await FirebaseFirestore.instance.collection('pcs').get();
+
+    final Map<String, Map<String, dynamic>> mapped = {};
+
+    for (int i = 1; i <= 40; i++) {
+      final pcName = 'PC$i';
+      final expectedPrefix = '$selectedRoom-$pcName-';
+
+      for (final doc in allDocs.docs) {
+        final docId = doc.id.trim();
+        final data = doc.data();
+
+        final fieldLab = (data['lab'] ?? '').toString().trim();
+        final fieldPc = (data['pc'] ?? '').toString().trim().toUpperCase();
+
+        final bool prefixMatch = docId.startsWith(expectedPrefix);
+        final bool fieldMatch =
+            fieldLab == selectedRoom && fieldPc == pcName.toUpperCase();
+
+        if (prefixMatch || fieldMatch) {
+          mapped[pcName.toUpperCase()] = {
+            'docId': doc.id,
+            'data': data,
+          };
+
+          debugPrint(
+            'MATCH FOUND -> room: $selectedRoom, pc: $pcName, docId: ${doc.id}',
+          );
+          break;
+        }
+      }
+    }
+
     setState(() {
-      selectedPc = pcName;
-      selectedPcData = data;
-      selectedPcDocId = docId;
+      docsByPc
+        ..clear()
+        ..addAll(mapped);
+
+      if (selectedPc != null) {
+        final selected = docsByPc[selectedPc!.toUpperCase()];
+        selectedPcData = selected?['data'] as Map<String, dynamic>?;
+        selectedPcDocId = selected?['docId'] as String?;
+      }
     });
   }
 
-  Widget buildPcBox(
-      String pcName,
-      Map<String, dynamic>? data,
-      String? docId,
-      ) {
+  @override
+  void initState() {
+    super.initState();
+    loadPcsForSelectedRoom();
+  }
+
+  void onPcTap(String pcName) {
+    setState(() {
+      selectedPc = pcName;
+
+      final selected = docsByPc[pcName.toUpperCase()];
+      selectedPcData = selected?['data'] as Map<String, dynamic>?;
+      selectedPcDocId = selected?['docId'] as String?;
+    });
+  }
+
+  Widget buildPcBox(String pcName) {
     final bool isSelected = selectedPc == pcName;
 
+    final selected = docsByPc[pcName.toUpperCase()];
+    final data = selected?['data'] as Map<String, dynamic>?;
+
     final bool qrCreated = data != null;
-    final bool hasStudentSubmission =
-        data != null &&
-            data['reported_by'] != null &&
-            data['reported_by'].toString().trim().isNotEmpty &&
-            data['updated_at'] != null;
 
-    Color boxColor = const Color(0xFFD9D9D9);
+    final String reportedBy = (data?['reported_by'] ?? '').toString().trim();
+    final bool studentSubmitted =
+        qrCreated &&
+            reportedBy.isNotEmpty &&
+            reportedBy.toLowerCase() != 'teacher';
 
-    if (hasStudentSubmission) {
-      boxColor = Colors.green;
-    } else if (isSelected) {
-      boxColor = const Color(0xFFF4EACF);
+    Color boxColor = const Color(0xFFD9D9D9); // gray = no QR
+
+    if (studentSubmitted) {
+      boxColor = Colors.green; // green = student submitted
+    } else if (qrCreated) {
+      boxColor = Colors.yellow; // yellow = QR created
+    }
+
+    if (isSelected) {
+      boxColor = boxColor.withOpacity(0.85);
     }
 
     return InkWell(
-      onTap: () => onPcTap(pcName, data, docId),
+      onTap: () => onPcTap(pcName),
       child: Container(
         width: 82,
         height: 72,
@@ -102,12 +164,8 @@ class _LabMapPageState extends State<LabMapPage> {
     );
   }
 
-  List<Widget> buildPcColumn(
-      int start,
-      int end,
-      Map<String, QueryDocumentSnapshot<Map<String, dynamic>>> docsByPc,
-      ) {
-    List<Widget> rows = [];
+  List<Widget> buildPcColumn(int start, int end) {
+    final List<Widget> rows = [];
 
     for (int i = start; i <= end; i += 5) {
       rows.add(
@@ -117,12 +175,9 @@ class _LabMapPageState extends State<LabMapPage> {
             final pcNumber = i + index;
             final pcName = 'PC$pcNumber';
 
-            final doc = docsByPc[pcName];
-            final data = doc?.data();
-
             return Padding(
               padding: const EdgeInsets.only(right: 8, bottom: 14),
-              child: buildPcBox(pcName, data, doc?.id),
+              child: buildPcBox(pcName),
             );
           }),
         ),
@@ -130,6 +185,36 @@ class _LabMapPageState extends State<LabMapPage> {
     }
 
     return rows;
+  }
+
+  Widget buildLegend() {
+    Widget item(Color color, String label) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 18,
+            height: 18,
+            decoration: BoxDecoration(
+              color: color,
+              border: Border.all(color: Colors.black54),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(label),
+        ],
+      );
+    }
+
+    return Wrap(
+      spacing: 20,
+      runSpacing: 10,
+      children: [
+        item(const Color(0xFFD9D9D9), 'No QR yet'),
+        item(Colors.yellow, 'QR created'),
+        item(Colors.green, 'Student submitted'),
+      ],
+    );
   }
 
   Widget buildPcDetails() {
@@ -145,12 +230,16 @@ class _LabMapPageState extends State<LabMapPage> {
 
     final data = selectedPcData;
     final bool qrCreated = data != null;
-    final String studentEmail =
-    data?['reported_by']?.toString().trim().isNotEmpty == true
-        ? data!['reported_by'].toString()
-        : 'N/A';
 
-    final String scanTime = formatTimestamp(data?['updated_at']);
+    final String reportedBy = (data?['reported_by'] ?? '').toString().trim();
+    final bool studentSubmitted =
+        qrCreated &&
+            reportedBy.isNotEmpty &&
+            reportedBy.toLowerCase() != 'teacher';
+
+    final String studentEmail = studentSubmitted ? reportedBy : 'N/A';
+    final String scanTime =
+    studentSubmitted ? formatTimestamp(data['updated_at']) : 'N/A';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -239,112 +328,88 @@ class _LabMapPageState extends State<LabMapPage> {
           ),
         ],
       ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('pcs')
-            .where('lab', isEqualTo: selectedRoom)
-            .snapshots(),
-        builder: (context, snapshot) {
-          final Map<String, QueryDocumentSnapshot<Map<String, dynamic>>> docsByPc = {};
-
-          if (snapshot.hasData) {
-            for (final doc in snapshot.data!.docs) {
-              final data = doc.data();
-              final pcName = (data['pc'] ?? '').toString();
-              if (pcName.isNotEmpty) {
-                docsByPc[pcName] = doc;
-              }
-            }
-
-            if (selectedPc != null) {
-              final selectedDoc = docsByPc[selectedPc!];
-              selectedPcData = selectedDoc?.data();
-              selectedPcDocId = selectedDoc?.id;
-            }
-          }
-
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    const Text(
-                      "Room:",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+      body: RefreshIndicator(
+        onRefresh: loadPcsForSelectedRoom,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Text(
+                    "Room:",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
                     ),
-                    const SizedBox(width: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        border: Border.all(color: Colors.black26),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: DropdownButton<String>(
-                        value: selectedRoom,
-                        underline: const SizedBox(),
-                        items: rooms.map((room) {
-                          return DropdownMenuItem<String>(
-                            value: room,
-                            child: Text('Room $room'),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setState(() {
-                            selectedRoom = value;
-                            selectedPc = null;
-                            selectedPcData = null;
-                            selectedPcDocId = null;
-                          });
-                        },
-                      ),
+                  ),
+                  const SizedBox(width: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: Colors.black26),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: DropdownButton<String>(
+                      value: selectedRoom,
+                      underline: const SizedBox(),
+                      items: rooms.map((room) {
+                        return DropdownMenuItem<String>(
+                          value: room,
+                          child: Text('Room $room'),
+                        );
+                      }).toList(),
+                      onChanged: (value) async {
+                        if (value == null) return;
+
+                        setState(() {
+                          selectedRoom = value;
+                          selectedPc = null;
+                          selectedPcData = null;
+                          selectedPcDocId = null;
+                          docsByPc.clear();
+                        });
+
+                        await loadPcsForSelectedRoom();
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              buildLegend(),
+              const SizedBox(height: 24),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Column(
+                      children: buildPcColumn(1, 20),
+                    ),
+                    const SizedBox(width: 100),
+                    Column(
+                      children: buildPcColumn(21, 40),
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
-                if (snapshot.connectionState == ConnectionState.waiting)
-                  const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: CircularProgressIndicator(),
-                    ),
-                  )
-                else
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Column(
-                          children: buildPcColumn(1, 20, docsByPc),
-                        ),
-                        const SizedBox(width: 100),
-                        Column(
-                          children: buildPcColumn(21, 40, docsByPc),
-                        ),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: 24),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: Colors.black12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: buildPcDetails(),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: Colors.black12),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              ],
-            ),
-          );
-        },
+                child: buildPcDetails(),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

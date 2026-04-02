@@ -42,24 +42,61 @@ class _TeacherReportFormPageState extends State<TeacherReportFormPage> {
       return;
     }
 
-    final query = await FirebaseFirestore.instance
+    final selectedLab = _selectedLab!.trim();
+    final selectedPc = _selectedPc!.trim();
+    final expectedPrefix = '$selectedLab-$selectedPc-';
+
+    // 1) Try exact field query first
+    final exactQuery = await FirebaseFirestore.instance
         .collection('pcs')
-        .where('lab', isEqualTo: _selectedLab)
-        .where('pc', isEqualTo: _selectedPc)
+        .where('lab', isEqualTo: selectedLab)
+        .where('pc', isEqualTo: selectedPc)
         .limit(1)
         .get();
 
-    if (query.docs.isEmpty) {
-      _pcCode = null;
-      _pcLabel = _selectedPc;
+    if (exactQuery.docs.isNotEmpty) {
+      final doc = exactQuery.docs.first;
+      final data = doc.data();
+
+      _pcCode = doc.id;
+      _pcLabel = (data['pc'] ?? selectedPc).toString().trim();
+
+      debugPrint('Teacher report matched by exact query -> ${doc.id}');
       return;
     }
 
-    final doc = query.docs.first;
-    final data = doc.data();
+    // 2) Fallback: scan all docs and match by normalized fields OR doc ID prefix
+    final allDocs = await FirebaseFirestore.instance.collection('pcs').get();
 
-    _pcCode = doc.id;
-    _pcLabel = (data['pc'] ?? _selectedPc).toString();
+    for (final doc in allDocs.docs) {
+      final data = doc.data();
+
+      final labValue = (data['lab'] ?? '').toString().trim();
+      final pcValue = (data['pc'] ?? '').toString().trim();
+      final docId = doc.id.trim();
+
+      debugPrint(
+        'Teacher lookup checking -> docId: "$docId", lab: "$labValue", pc: "$pcValue"',
+      );
+
+      final fieldMatch = labValue == selectedLab && pcValue == selectedPc;
+      final prefixMatch = docId.startsWith(expectedPrefix);
+
+      if (fieldMatch || prefixMatch) {
+        _pcCode = doc.id;
+        _pcLabel = pcValue.isNotEmpty ? pcValue : selectedPc;
+
+        debugPrint('Teacher report matched by fallback -> ${doc.id}');
+        return;
+      }
+    }
+
+    _pcCode = null;
+    _pcLabel = selectedPc;
+
+    debugPrint(
+      'No matching PC found for lab="$selectedLab" and pc="$selectedPc"',
+    );
   }
 
   Future<void> _submitReport() async {

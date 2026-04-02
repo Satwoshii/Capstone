@@ -1,9 +1,11 @@
-import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart' as ex;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:universal_html/html.dart' as html;
 
 class AttendancePage extends StatefulWidget {
   const AttendancePage({super.key});
@@ -13,53 +15,105 @@ class AttendancePage extends StatefulWidget {
 }
 
 class _AttendancePageState extends State<AttendancePage> {
+  Map<String, Map<String, dynamic>> groupAttendanceByEmail(
+      List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+      ) {
+    final Map<String, Map<String, dynamic>> grouped = {};
+
+    for (final doc in docs) {
+      final data = doc.data();
+      final email = (data['student_email'] ?? '').toString().trim();
+
+      if (email.isEmpty) continue;
+
+      if (!grouped.containsKey(email)) {
+        grouped[email] = {
+          'present': 0.0,
+          'late': 0.0,
+          'dates': <String>[],
+        };
+      }
+
+      grouped[email]!['present'] +=
+          (data['present'] as num?)?.toDouble() ?? 0.0;
+      grouped[email]!['late'] +=
+          (data['late'] as num?)?.toDouble() ?? 0.0;
+
+      final date = (data['date'] ?? '').toString().trim();
+      if (date.isNotEmpty) {
+        final dates = grouped[email]!['dates'] as List<String>;
+        if (!dates.contains(date)) {
+          dates.add(date);
+        }
+      }
+    }
+
+    return grouped;
+  }
+
   Future<void> exportToExcel(
       List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
       ) async {
     try {
+      final grouped = groupAttendanceByEmail(docs);
+
       final excel = ex.Excel.createExcel();
-      final sheet = excel['Attendance'];
+      final defaultSheetName = excel.getDefaultSheet() ?? 'Sheet1';
+      final sheet = excel[defaultSheetName];
 
       sheet.appendRow([
         'Email',
         'Present',
         'Late',
         'Attendance Score',
+        'Date Scanned',
       ]);
 
-      for (final doc in docs) {
-        final data = doc.data();
+      for (final entry in grouped.entries) {
+        final email = entry.key;
+        final present = entry.value['present'] as double;
+        final late = entry.value['late'] as double;
+        final score = present + late;
+        final dates = (entry.value['dates'] as List<String>).join(', ');
 
         sheet.appendRow([
-          data['student_email'] ?? '',
-          data['present'] ?? 0,
-          data['late'] ?? 0,
-          data['attendance_score'] ?? 0,
+          email,
+          present.toString(),
+          late.toString(),
+          score.toString(),
+          dates,
         ]);
       }
 
-      final directory = Directory.systemTemp;
-      final path = "${directory.path}/attendance.xlsx";
-
       final bytes = excel.encode();
-      if (bytes == null) return;
+      if (bytes == null) {
+        throw Exception('Failed to generate Excel file');
+      }
 
-      final file = File(path)
-        ..createSync(recursive: true)
-        ..writeAsBytesSync(bytes);
+      if (kIsWeb) {
+        final uint8List = Uint8List.fromList(bytes);
+        final base64Data = base64Encode(uint8List);
+
+        html.AnchorElement(
+          href:
+          'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,$base64Data',
+        )
+          ..download = 'attendance.xlsx'
+          ..click();
+      } else {
+        throw Exception('This export code is currently set up for web only.');
+      }
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Excel exported: ${file.path}"),
-        ),
+        const SnackBar(content: Text('Excel exported successfully')),
       );
     } catch (e) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Export failed: $e")),
+        SnackBar(content: Text('Export failed: $e')),
       );
     }
   }
@@ -70,7 +124,7 @@ class _AttendancePageState extends State<AttendancePage> {
       List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
       ) {
     final userDocs = docs
-        .where((doc) => doc.data()['student_email'] == email)
+        .where((doc) => (doc.data()['student_email'] ?? '') == email)
         .toList();
 
     showDialog(
@@ -87,38 +141,13 @@ class _AttendancePageState extends State<AttendancePage> {
 
               return ListTile(
                 leading: const Icon(Icons.calendar_today),
-                title: Text(data['date'] ?? 'No date'),
+                title: Text((data['date'] ?? 'No date').toString()),
               );
             },
           ),
         ),
       ),
     );
-  }
-
-  Map<String, Map<String, dynamic>> groupAttendanceByEmail(
-      List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-      ) {
-    final Map<String, Map<String, dynamic>> grouped = {};
-
-    for (final doc in docs) {
-      final data = doc.data();
-      final email = data['student_email'] ?? '';
-
-      if (!grouped.containsKey(email)) {
-        grouped[email] = {
-          'present': 0.0,
-          'late': 0.0,
-        };
-      }
-
-      grouped[email]!['present'] +=
-          (data['present'] as num?)?.toDouble() ?? 0;
-      grouped[email]!['late'] +=
-          (data['late'] as num?)?.toDouble() ?? 0;
-    }
-
-    return grouped;
   }
 
   @override
@@ -178,10 +207,8 @@ class _AttendancePageState extends State<AttendancePage> {
                         DataColumn(label: Text('Details')),
                       ],
                       rows: emails.map((email) {
-                        final present =
-                        grouped[email]!['present'] as double;
-                        final late =
-                        grouped[email]!['late'] as double;
+                        final present = grouped[email]!['present'] as double;
+                        final late = grouped[email]!['late'] as double;
                         final score = present + late;
 
                         return DataRow(
