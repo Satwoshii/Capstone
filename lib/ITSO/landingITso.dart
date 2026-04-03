@@ -91,10 +91,10 @@ class LandingITSO extends StatelessWidget {
         elevation: 0,
         toolbarHeight: 68,
         leading: IconButton(
-          icon: ImageIcon(
-            const AssetImage('assets/Icons/ic_menu.png'),
+          icon: const Icon(
+            Icons.menu,
             color: _nuGold,
-            size: 32,
+            size: 28,
           ),
           onPressed: () => scaffoldKey.currentState?.openDrawer(),
         ),
@@ -208,7 +208,7 @@ class LandingITSO extends StatelessWidget {
                 Expanded(child: _FeatureCard(
                   title: 'Report Log',
                   subtitle: 'View and manage incident reports',
-                  iconPath: 'assets/Icons/ic_report.png',
+                  icon: Icons.assignment_outlined,
                   onTap: () => Navigator.push(context,
                       MaterialPageRoute(builder: (_) => const ReportLogPage())),
                 )),
@@ -216,7 +216,7 @@ class LandingITSO extends StatelessWidget {
                 Expanded(child: _FeatureCard(
                   title: 'QR Management',
                   subtitle: 'Generate and track QR codes',
-                  iconPath: 'assets/Icons/ic_qr.png',
+                  icon: Icons.qr_code_scanner,
                   onTap: () => Navigator.push(context,
                       MaterialPageRoute(builder: (_) => const QrManagementPage())),
                 )),
@@ -224,7 +224,7 @@ class LandingITSO extends StatelessWidget {
                 Expanded(child: _FeatureCard(
                   title: 'PC Management',
                   subtitle: 'Monitor lab computer inventory',
-                  iconPath: 'assets/Icons/ic_pc.png',
+                  icon: Icons.computer,
                   onTap: () => Navigator.push(context,
                       MaterialPageRoute(builder: (_) => const PcManagementPage())),
                 )),
@@ -347,7 +347,7 @@ class _StatsGrid extends StatelessWidget {
         Expanded(child: _StatCard(
           label: 'Total PCs',
           value: '$totalPcs',
-          iconPath: 'assets/Icons/ic_monitor.png',
+          icon: Icons.monitor,
           accentColor: _nuDarkBlue,
           iconBgColor: const Color(0xFFE8EEF8),
           valueColor: _nuDarkBlue,
@@ -356,7 +356,7 @@ class _StatsGrid extends StatelessWidget {
         Expanded(child: _StatCard(
           label: 'PCs w/ Problems',
           value: '$problemPcs',
-          iconPath: 'assets/Icons/ic_warning.png',
+          icon: Icons.warning_rounded,
           accentColor: const Color(0xFFEF4444),
           iconBgColor: const Color(0xFFFEE2E2),
           valueColor: const Color(0xFFDC2626),
@@ -365,7 +365,7 @@ class _StatsGrid extends StatelessWidget {
         Expanded(child: _StatCard(
           label: 'Pending Reports',
           value: '$pendingReports',
-          iconPath: 'assets/Icons/ic_clock.png',
+          icon: Icons.pending_actions,
           accentColor: const Color(0xFFFFD700),
           iconBgColor: const Color(0xFFFEF9C3),
           valueColor: const Color(0xFFD97706),
@@ -374,7 +374,7 @@ class _StatsGrid extends StatelessWidget {
         Expanded(child: _StatCard(
           label: 'Resolved Today',
           value: '$resolvedReports',
-          iconPath: 'assets/Icons/ic_check.png',
+          icon: Icons.check_circle,
           accentColor: const Color(0xFF22C55E),
           iconBgColor: const Color(0xFFDCFCE7),
           valueColor: const Color(0xFF16A34A),
@@ -385,11 +385,12 @@ class _StatsGrid extends StatelessWidget {
 }
 
 class _StatCard extends StatelessWidget {
-  final String label, value, iconPath;
+  final String label, value;
+  final IconData icon;
   final Color accentColor, iconBgColor, valueColor;
 
   const _StatCard({
-    required this.label, required this.value, required this.iconPath,
+    required this.label, required this.value, required this.icon,
     required this.accentColor, required this.iconBgColor, required this.valueColor,
   });
 
@@ -420,10 +421,10 @@ class _StatCard extends StatelessWidget {
             ],
           ),
           Container(
-            width: 64, height: 64,
+            width: 54, height: 54,
             decoration: BoxDecoration(color: iconBgColor, shape: BoxShape.circle),
             child: Center(
-              child: ImageIcon(AssetImage(iconPath), size: 32, color: accentColor),
+              child: Icon(icon, size: 28, color: accentColor),
             ),
           ),
         ],
@@ -543,12 +544,13 @@ class _AlertRow extends StatelessWidget {
 
 // ── Feature Card ──────────────────────────────────────────────────────────────
 class _FeatureCard extends StatefulWidget {
-  final String title, subtitle, iconPath;
+  final String title, subtitle;
+  final IconData icon;
   final VoidCallback onTap;
 
   const _FeatureCard({
     required this.title, required this.subtitle,
-    required this.iconPath, required this.onTap,
+    required this.icon, required this.onTap,
   });
 
   @override
@@ -593,9 +595,9 @@ class _FeatureCardState extends State<_FeatureCard> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Center(
-                  child: ImageIcon(
-                    AssetImage(widget.iconPath),
-                    size: 32,
+                  child: Icon(
+                    widget.icon,
+                    size: 28,
                     color: _hovered ? _nuGold : _nuDarkBlue,
                   ),
                 ),

@@ -176,17 +176,6 @@ class ItsoDrawer extends StatelessWidget {
                       style: TextStyle(color: Colors.white70),
                     ),
                   ),
-                  const Spacer(),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.06),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: IconButton(
-                      onPressed: () {},
-                      icon: const Icon(Icons.settings, color: Colors.white70),
-                    ),
-                  ),
                 ],
               ),
             ),
