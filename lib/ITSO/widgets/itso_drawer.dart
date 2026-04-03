@@ -2,28 +2,29 @@ import 'package:flutter/material.dart';
 import '../app_state.dart';
 import '../pages/login/screens/login_screen.dart';
 import '../pages/reportLog.dart';
-import '../pages/qr_management.dart'; // <- ensure this filename & casing
+import '../pages/qr_management.dart';
 import '../pages/pcManagement.dart';
 import '../landingITso.dart';
+
+// ── NU Clark Colors (MATCH DASHBOARD) ─────────────────────────
+const Color _nuDarkBlue = Color(0xFF001A52);
+const Color _nuBlue     = Color(0xFF003087);
+const Color _nuGold     = Color(0xFFFFD700);
+const Color _nuWhite    = Color(0xFFF8F9FF);
 
 class ItsoDrawer extends StatelessWidget {
   const ItsoDrawer({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context).colorScheme;
-    final darkBlue = Color.lerp(color.primary, Colors.black, 0.25)!;
     final app = AppStateScope.of(context);
     final name = app.user?.name ?? '—';
     final email = app.user?.email ?? '—';
 
-    /// Close the Drawer once, then defer the route push to the next microtask.
-    /// This avoids mutating routes in the same pointer frame (fixes mouse_tracker assertion).
+    /// DO NOT TOUCH (navigation logic preserved)
     void go(Widget page, {bool replaceAll = false}) {
-      // 1) Close the Drawer route
       Navigator.of(context).pop();
 
-      // 2) Defer navigation to the next microtask
       Future.microtask(() {
         if (!context.mounted) return;
         final route = MaterialPageRoute(builder: (_) => page);
@@ -37,49 +38,66 @@ class ItsoDrawer extends StatelessWidget {
 
     return Drawer(
       width: 300,
-      backgroundColor: darkBlue,
+      backgroundColor: _nuDarkBlue,
       child: SafeArea(
         child: Column(
           children: [
-            // Header
+
+            // ── HEADER (MATCH APPBAR) ─────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: color.primary,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Row(
-                  children: const [
-                    CircleAvatar(
-                      backgroundColor: Colors.white24,
-                      child: Icon(Icons.school, color: Colors.white),
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white,
+                      border: Border.all(color: _nuGold, width: 2),
                     ),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'National University\nClark',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/Images/NUSchoolLogo.png',
+                        fit: BoxFit.contain,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'ITSO VIEW',
+                        style: TextStyle(
+                          color: _nuWhite,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                      Text(
+                        'NU CLARK',
+                        style: TextStyle(
+                          color: _nuGold.withOpacity(0.8),
+                          fontSize: 11,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
 
-            // Dynamic user block
+            // ── USER CARD ─────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(14),
+                  color: Colors.white.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.white10),
                 ),
                 child: Column(
@@ -90,27 +108,15 @@ class ItsoDrawer extends StatelessWidget {
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
-                        fontSize: 16,
+                        fontSize: 15,
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.14),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white10),
-                      ),
-                      child: Text(
-                        email,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w500,
-                        ),
+                    Text(
+                      email,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
                       ),
                     ),
                   ],
@@ -118,40 +124,41 @@ class ItsoDrawer extends StatelessWidget {
               ),
             ),
 
-            // Menu
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Column(
-                children: [
-                  _MenuTile(
-                    icon: Icons.dashboard_outlined,
-                    label: 'Dashboard',
-                    onTap: () => go(const LandingITSO(), replaceAll: true),
-                  ),
-                  _MenuTile(
-                    icon: Icons.table_chart_outlined,
-                    label: 'Report Log',
-                    onTap: () => go(const ReportLogPage()),
-                  ),
-                  _MenuTile(
-                    icon: Icons.qr_code_2,
-                    label: 'QR Management',
-                    onTap: () => go(const QrManagementPage()),
-                  ),
-                  _MenuTile(
-                    icon: Icons.computer,
-                    label: 'PC Management',
-                    onTap: () => go(const PcManagementPage()),
-                  ),
-                ],
+            const SizedBox(height: 12),
+
+            // ── MENU ITEMS ────────────────────────────────────
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    _MenuTile(
+                      icon: Icons.dashboard_outlined,
+                      label: 'Dashboard',
+                      onTap: () => go(const LandingITSO(), replaceAll: true),
+                    ),
+                    _MenuTile(
+                      icon: Icons.table_chart_outlined,
+                      label: 'Report Log',
+                      onTap: () => go(const ReportLogPage()),
+                    ),
+                    _MenuTile(
+                      icon: Icons.qr_code_2,
+                      label: 'QR Management',
+                      onTap: () => go(const QrManagementPage()),
+                    ),
+                    _MenuTile(
+                      icon: Icons.computer,
+                      label: 'PC Management',
+                      onTap: () => go(const PcManagementPage()),
+                    ),
+                  ],
+                ),
               ),
             ),
 
-            const Spacer(),
-
-            // Logout
+            // ── LOGOUT SECTION ────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
               child: Row(
                 children: [
                   TextButton.icon(
@@ -170,9 +177,15 @@ class ItsoDrawer extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(Icons.settings, color: Colors.white70),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: IconButton(
+                      onPressed: () {},
+                      icon: const Icon(Icons.settings, color: Colors.white70),
+                    ),
                   ),
                 ],
               ),
@@ -184,10 +197,12 @@ class ItsoDrawer extends StatelessWidget {
   }
 }
 
-class _MenuTile extends StatelessWidget {
+// ── MENU TILE (MATCH FEATURE CARDS STYLE) ─────────────────────
+class _MenuTile extends StatefulWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+
   const _MenuTile({
     required this.icon,
     required this.label,
@@ -195,34 +210,54 @@ class _MenuTile extends StatelessWidget {
   });
 
   @override
+  State<_MenuTile> createState() => _MenuTileState();
+}
+
+class _MenuTileState extends State<_MenuTile> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.08),
+            color: _hovered
+                ? Colors.white.withOpacity(0.12)
+                : Colors.white.withOpacity(0.06),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white10),
+            border: Border.all(
+              color: _hovered ? _nuGold : Colors.white10,
+            ),
           ),
           child: Row(
             children: [
-              Icon(icon, color: Colors.white, size: 20),
+              Icon(
+                widget.icon,
+                color: _hovered ? _nuGold : Colors.white,
+                size: 20,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  label,
+                  widget.label,
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
-              const Icon(Icons.chevron_right, color: Colors.white54, size: 20),
+              Icon(
+                Icons.arrow_forward_ios,
+                size: 14,
+                color: _hovered ? _nuGold : Colors.white38,
+              ),
             ],
           ),
         ),
