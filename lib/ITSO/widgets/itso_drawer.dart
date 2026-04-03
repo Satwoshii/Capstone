@@ -253,11 +253,6 @@ class _MenuTileState extends State<_MenuTile> {
                   ),
                 ),
               ),
-              Icon(
-                Icons.arrow_forward_ios,
-                size: 14,
-                color: _hovered ? _nuGold : Colors.white38,
-              ),
             ],
           ),
         ),
