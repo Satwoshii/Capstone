@@ -9,9 +9,10 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  final TextEditingController email = TextEditingController();
-  final TextEditingController password = TextEditingController();
-  final TextEditingController confirmPassword = TextEditingController();
+  final fullName = TextEditingController();
+  final email = TextEditingController();
+  final password = TextEditingController();
+  final confirmPassword = TextEditingController();
 
   final auth = AuthService();
 
@@ -19,80 +20,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool showConfirmPassword = false;
 
   String? confirmPasswordError;
-  String passwordStrengthText = "";
-  Color passwordStrengthColor = Colors.grey;
-
-  @override
-  void initState() {
-    super.initState();
-    password.addListener(_validateInputs);
-    confirmPassword.addListener(_validateInputs);
-  }
-
-  void _validateInputs() {
-    final pass = password.text;
-    final confirmPass = confirmPassword.text;
-
-    setState(() {
-      passwordStrengthText = _getPasswordStrengthText(pass);
-      passwordStrengthColor = _getPasswordStrengthColor(pass);
-
-      if (confirmPass.isEmpty) {
-        confirmPasswordError = null;
-      } else if (pass != confirmPass) {
-        confirmPasswordError = "Passwords do not match";
-      } else {
-        confirmPasswordError = null;
-      }
-    });
-  }
-
-  String _getPasswordStrengthText(String value) {
-    if (value.isEmpty) return "";
-
-    int score = 0;
-    if (value.length >= 8) score++;
-    if (RegExp(r'[A-Z]').hasMatch(value)) score++;
-    if (RegExp(r'[a-z]').hasMatch(value)) score++;
-    if (RegExp(r'[0-9]').hasMatch(value)) score++;
-    if (RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(value)) score++;
-
-    if (score <= 2) return "Weak password";
-    if (score <= 4) return "Medium password";
-    return "Strong password";
-  }
-
-  Color _getPasswordStrengthColor(String value) {
-    if (value.isEmpty) return Colors.grey;
-
-    int score = 0;
-    if (value.length >= 8) score++;
-    if (RegExp(r'[A-Z]').hasMatch(value)) score++;
-    if (RegExp(r'[a-z]').hasMatch(value)) score++;
-    if (RegExp(r'[0-9]').hasMatch(value)) score++;
-    if (RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(value)) score++;
-
-    if (score <= 2) return Colors.red;
-    if (score <= 4) return Colors.orange;
-    return Colors.green;
-  }
-
-  bool _isPasswordStrongEnough(String value) {
-    return value.length >= 8 &&
-        RegExp(r'[A-Z]').hasMatch(value) &&
-        RegExp(r'[a-z]').hasMatch(value) &&
-        RegExp(r'[0-9]').hasMatch(value);
-  }
 
   Future<void> registerUser() async {
-    if (email.text.isEmpty ||
+    if (fullName.text.isEmpty ||
+        email.text.isEmpty ||
         password.text.isEmpty ||
         confirmPassword.text.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Please fill in all fields")),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please fill in all fields")),
+      );
       return;
     }
 
@@ -103,223 +39,135 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    if (!_isPasswordStrongEnough(password.text)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              "Password must be at least 8 characters and include uppercase, lowercase, and number",
-            ),
-          ),
-        );
-      }
-      return;
-    }
-
     try {
-      await auth.register(email.text, password.text);
+      await auth.register(
+        fullName.text,
+        email.text,
+        password.text,
+      );
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Registration Successful")),
-        );
-        Navigator.pop(context);
-      }
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Registration Successful")),
+      );
+
+      Navigator.pop(context);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: ${e.toString()}")),
-        );
-      }
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: ${e.toString()}")),
+      );
     }
   }
 
   @override
   void dispose() {
+    fullName.dispose();
     email.dispose();
     password.dispose();
     confirmPassword.dispose();
     super.dispose();
   }
 
-  InputDecoration _inputDecoration({
-    required String label,
-    Widget? suffixIcon,
-    String? errorText,
-  }) {
+  InputDecoration _input(String label) {
     return InputDecoration(
       labelText: label,
-      floatingLabelBehavior: FloatingLabelBehavior.auto,
-      errorText: errorText,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
       ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(
-          color: Color(0xFFF2C300),
-          width: 2,
-        ),
-      ),
-      suffixIcon: suffixIcon,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage("assets/Images/NUBackdrop.png"),
-            fit: BoxFit.cover,
+      body: Center(
+        child: Container(
+          width: 350,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [
+              BoxShadow(blurRadius: 10, color: Colors.black26)
+            ],
           ),
-        ),
-        child: Center(
-          child: Container(
-            width: 320,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: const [
-                BoxShadow(
-                  color: Colors.black26,
-                  blurRadius: 25,
-                  offset: Offset(0, 10),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Image.asset(
-                  "assets/Images/NUSchoolLogo.png",
-                  width: 80,
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  "Register",
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "Register",
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+
+              // ✅ FULL NAME
+              TextField(
+                controller: fullName,
+                decoration: _input("Full Name"),
+              ),
+              const SizedBox(height: 12),
+
+              // EMAIL
+              TextField(
+                controller: email,
+                decoration: _input("Email"),
+              ),
+              const SizedBox(height: 12),
+
+              // PASSWORD
+              TextField(
+                controller: password,
+                obscureText: !showPassword,
+                decoration: _input("Password").copyWith(
+                  suffixIcon: IconButton(
+                    icon: Icon(showPassword
+                        ? Icons.visibility
+                        : Icons.visibility_off),
+                    onPressed: () {
+                      setState(() {
+                        showPassword = !showPassword;
+                      });
+                    },
                   ),
                 ),
-                const SizedBox(height: 20),
+              ),
+              const SizedBox(height: 12),
 
-                // Email
-                TextField(
-                  controller: email,
-                  decoration: _inputDecoration(label: "Email"),
-                ),
-                const SizedBox(height: 12),
-
-                // Password (show/hide PNG)
-                TextField(
-                  controller: password,
-                  obscureText: !showPassword,
-                  enableSuggestions: false,
-                  autocorrect: false,
-                  decoration: _inputDecoration(
-                    label: "Password",
-                    suffixIcon: InkWell(
-                      onTap: () {
-                        setState(() {
-                          showPassword = !showPassword;
-                        });
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Image.asset(
-                          showPassword
-                              ? "assets/Icons/eye.png"
-                              : "assets/Icons/hidden.png",
-                          width: 24,
-                          height: 24,
-                        ),
-                      ),
-                    ),
+              // CONFIRM PASSWORD
+              TextField(
+                controller: confirmPassword,
+                obscureText: !showConfirmPassword,
+                decoration: _input("Confirm Password").copyWith(
+                  errorText: confirmPasswordError,
+                  suffixIcon: IconButton(
+                    icon: Icon(showConfirmPassword
+                        ? Icons.visibility
+                        : Icons.visibility_off),
+                    onPressed: () {
+                      setState(() {
+                        showConfirmPassword = !showConfirmPassword;
+                      });
+                    },
                   ),
                 ),
+              ),
+              const SizedBox(height: 20),
 
-                if (passwordStrengthText.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      passwordStrengthText,
-                      style: TextStyle(
-                        color: passwordStrengthColor,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
+              ElevatedButton(
+                onPressed: registerUser,
+                child: const Text("Register"),
+              ),
 
-                const SizedBox(height: 12),
+              const SizedBox(height: 10),
 
-                // Confirm Password (show/hide PNG)
-                TextField(
-                  controller: confirmPassword,
-                  obscureText: !showConfirmPassword,
-                  enableSuggestions: false,
-                  autocorrect: false,
-                  decoration: _inputDecoration(
-                    label: "Confirm Password",
-                    errorText: confirmPasswordError,
-                    suffixIcon: InkWell(
-                      onTap: () {
-                        setState(() {
-                          showConfirmPassword = !showConfirmPassword;
-                        });
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Image.asset(
-                          showConfirmPassword
-                              ? "assets/Icons/eye.png"
-                              : "assets/Icons/hidden.png",
-                          width: 24,
-                          height: 24,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                SizedBox(
-                  width: 140,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFF2C300),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                    onPressed: registerUser,
-                    child: const Text(
-                      "Register",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                  child: const Text("Already have an account? Log In"),
-                ),
-              ],
-            ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Already have an account? Log in"),
+              ),
+            ],
           ),
         ),
       ),

@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'login/screens/login_screen.dart';
 import '../studentvw_pages/report_form.dart';
+import 'login/screens/login_screen.dart';
+import 'login/services/jwt_service.dart';
 import 'report_page.dart';
 
 class Dashboard extends StatefulWidget {
@@ -17,8 +18,42 @@ class _DashboardState extends State<Dashboard> {
   bool scanLocked = false;
   final TextEditingController uniqueCodeController = TextEditingController();
 
+  String userName = 'Student';
+  String userEmail = 'No email';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserInfo();
+  }
+
+  Future<void> _loadUserInfo() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString("token");
+
+    if (token == null) {
+      await _logout(context);
+      return;
+    }
+
+    final payload = JWTService.verifyToken(token);
+
+    if (payload == null) {
+      await _logout(context);
+      return;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      userName =
+          (payload['full_name'] ?? payload['name'] ?? 'Student').toString();
+      userEmail = (payload['email'] ?? 'No email').toString();
+    });
+  }
+
   Future<void> _logout(BuildContext context) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
     await prefs.remove("token");
 
     if (!context.mounted) return;
@@ -33,7 +68,6 @@ class _DashboardState extends State<Dashboard> {
   String? parsePC(String qrData) {
     try {
       final uri = Uri.parse(qrData);
-
       final String? code = uri.queryParameters['code'];
 
       if (code == null && !qrData.contains('://')) {
@@ -55,7 +89,11 @@ class _DashboardState extends State<Dashboard> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => StudentReportFormPage(pcCode: scannedPC),
+        builder: (_) => StudentReportFormPage(
+          pcCode: scannedPC,
+          initialStudentName: userName,
+          initialStudentEmail: userEmail,
+        ),
       ),
     ).then((_) {
       if (mounted) {
@@ -71,7 +109,7 @@ class _DashboardState extends State<Dashboard> {
 
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           title: const Text("Enter Unique Code"),
           content: TextField(
@@ -84,21 +122,28 @@ class _DashboardState extends State<Dashboard> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogContext),
               child: const Text("Cancel"),
             ),
             ElevatedButton(
               onPressed: () {
-                final code = uniqueCodeController.text.trim();
+                String code = uniqueCodeController.text.trim();
 
                 if (code.isEmpty) {
-                  ScaffoldMessenger.of(this.context).showSnackBar(
-                    const SnackBar(content: Text("Please enter a unique code")),
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Please enter a unique code"),
+                    ),
                   );
                   return;
                 }
 
-                Navigator.pop(context);
+                final uri = Uri.tryParse(code);
+                if (uri != null && uri.queryParameters.containsKey('code')) {
+                  code = uri.queryParameters['code']!.trim();
+                }
+
+                Navigator.pop(dialogContext);
                 navigateToReport(code);
               },
               child: const Text("Proceed"),
@@ -123,43 +168,46 @@ class _DashboardState extends State<Dashboard> {
       ),
       drawer: Drawer(
         child: ListView(
+          padding: EdgeInsets.zero,
           children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(color: Colors.blue),
-              child: Text(
-                "Menu",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
+            UserAccountsDrawerHeader(
+              decoration: const BoxDecoration(
+                color: Color(0xFF3F51B5),
+              ),
+              accountName: Text(
+                userName,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              accountEmail: Text(
+                userEmail,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              currentAccountPicture: const CircleAvatar(
+                backgroundColor: Color(0xFFD9CCF5),
+                child: Icon(
+                  Icons.person,
+                  size: 38,
+                  color: Color(0xFF5A3E9B),
                 ),
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.qr_code_scanner),
-              title: const Text("Scan QR"),
-              onTap: () {
-                Navigator.pop(context);
-              },
+              leading: const Icon(Icons.dashboard),
+              title: const Text("Dashboard"),
+              onTap: () => Navigator.pop(context),
             ),
             ListTile(
-              leading: const Icon(Icons.password),
-              title: const Text("Enter Unique Code"),
+              leading: const Icon(Icons.qr_code_scanner),
+              title: const Text("Scan / Enter Code"),
               onTap: () {
                 Navigator.pop(context);
                 _openUniqueCodeDialog();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.support_agent),
-              title: const Text("Contact ITSO"),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const ReportPage(),
-                  ),
-                );
               },
             ),
             ListTile(
@@ -220,7 +268,6 @@ class _DashboardState extends State<Dashboard> {
               }
             },
           ),
-
           Center(
             child: Container(
               width: 260,
@@ -231,7 +278,6 @@ class _DashboardState extends State<Dashboard> {
               ),
             ),
           ),
-
           const Positioned(
             bottom: 120,
             left: 0,
@@ -247,7 +293,6 @@ class _DashboardState extends State<Dashboard> {
               ),
             ),
           ),
-
           Positioned(
             bottom: 40,
             left: 20,
@@ -258,13 +303,6 @@ class _DashboardState extends State<Dashboard> {
                 onPressed: _openUniqueCodeDialog,
                 icon: const Icon(Icons.password),
                 label: const Text("Enter Unique Code"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.amber,
-                  foregroundColor: Colors.black,
-                  textStyle: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
               ),
             ),
           ),

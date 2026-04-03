@@ -6,11 +6,10 @@ import '../pages/qr_management.dart';
 import '../pages/pcManagement.dart';
 import '../landingITso.dart';
 
-// ── NU Clark Colors (MATCH DASHBOARD) ─────────────────────────
 const Color _nuDarkBlue = Color(0xFF001A52);
-const Color _nuBlue     = Color(0xFF003087);
-const Color _nuGold     = Color(0xFFFFD700);
-const Color _nuWhite    = Color(0xFFF8F9FF);
+const Color _nuBlue = Color(0xFF003087);
+const Color _nuGold = Color(0xFFFFD700);
+const Color _nuWhite = Color(0xFFF8F9FF);
 
 class ItsoDrawer extends StatelessWidget {
   const ItsoDrawer({super.key});
@@ -21,7 +20,6 @@ class ItsoDrawer extends StatelessWidget {
     final name = app.user?.name ?? '—';
     final email = app.user?.email ?? '—';
 
-    /// DO NOT TOUCH (navigation logic preserved)
     void go(Widget page, {bool replaceAll = false}) {
       Navigator.of(context).pop();
 
@@ -42,8 +40,6 @@ class ItsoDrawer extends StatelessWidget {
       child: SafeArea(
         child: Column(
           children: [
-
-            // ── HEADER (MATCH APPBAR) ─────────────────────────
             Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
@@ -88,8 +84,6 @@ class ItsoDrawer extends StatelessWidget {
                 ],
               ),
             ),
-
-            // ── USER CARD ─────────────────────────────────────
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Container(
@@ -123,10 +117,7 @@ class ItsoDrawer extends StatelessWidget {
                 ),
               ),
             ),
-
             const SizedBox(height: 12),
-
-            // ── MENU ITEMS ────────────────────────────────────
             Expanded(
               child: SingleChildScrollView(
                 child: Column(
@@ -155,8 +146,6 @@ class ItsoDrawer extends StatelessWidget {
                 ),
               ),
             ),
-
-            // ── LOGOUT SECTION ────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
               child: Row(
@@ -186,7 +175,6 @@ class ItsoDrawer extends StatelessWidget {
   }
 }
 
-// ── MENU TILE (MATCH FEATURE CARDS STYLE) ─────────────────────
 class _MenuTile extends StatefulWidget {
   final IconData icon;
   final String label;

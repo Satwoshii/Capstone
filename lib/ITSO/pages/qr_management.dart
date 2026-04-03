@@ -34,6 +34,8 @@ class _QrManagementPageState extends State<QrManagementPage> {
   bool _bulkGenerating = false;
   bool _bulkPrinting = false;
 
+  final Set<String> _expandedRooms = <String>{};
+
   @override
   void dispose() {
     _pcCtrl.dispose();
@@ -91,7 +93,9 @@ class _QrManagementPageState extends State<QrManagementPage> {
         SnackBar(content: Text('Failed to get next PC number: $e')),
       );
     } finally {
-      if (mounted) setState(() => _loadingNext = false);
+      if (mounted) {
+        setState(() => _loadingNext = false);
+      }
     }
   }
 
@@ -195,6 +199,8 @@ class _QrManagementPageState extends State<QrManagementPage> {
         'status': 'available',
         'comment': '',
         'reported_by': '',
+        'reported_by_name': '',
+        'reported_by_email': '',
         'created_at': Timestamp.now(),
         'updated_at': FieldValue.serverTimestamp(),
         'peripherals': {
@@ -213,14 +219,16 @@ class _QrManagementPageState extends State<QrManagementPage> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('QR Generated and saved successfully')),
+        const SnackBar(content: Text('QR generated and saved successfully')),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to save QR: $e')),
       );
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) {
+        setState(() => _saving = false);
+      }
     }
   }
 
@@ -285,6 +293,8 @@ class _QrManagementPageState extends State<QrManagementPage> {
           'status': 'available',
           'comment': '',
           'reported_by': '',
+          'reported_by_name': '',
+          'reported_by_email': '',
           'created_at': Timestamp.now(),
           'updated_at': FieldValue.serverTimestamp(),
           'peripherals': {
@@ -319,7 +329,9 @@ class _QrManagementPageState extends State<QrManagementPage> {
         SnackBar(content: Text('Failed to generate all QRs: $e')),
       );
     } finally {
-      if (mounted) setState(() => _bulkGenerating = false);
+      if (mounted) {
+        setState(() => _bulkGenerating = false);
+      }
     }
   }
 
@@ -335,13 +347,20 @@ class _QrManagementPageState extends State<QrManagementPage> {
       return _logoDataUrlCache!;
     } catch (_) {
       try {
-        final bytes = await rootBundle.load('assets/Images/nu_logo.png');
+        final bytes = await rootBundle.load('assets/Images/NUSchoolLogo.png');
         final b64 = base64Encode(bytes.buffer.asUint8List());
         _logoDataUrlCache = 'data:image/png;base64,$b64';
         return _logoDataUrlCache!;
       } catch (_) {
-        _logoDataUrlCache = '';
-        return _logoDataUrlCache!;
+        try {
+          final bytes = await rootBundle.load('assets/Images/nu_logo.png');
+          final b64 = base64Encode(bytes.buffer.asUint8List());
+          _logoDataUrlCache = 'data:image/png;base64,$b64';
+          return _logoDataUrlCache!;
+        } catch (_) {
+          _logoDataUrlCache = '';
+          return _logoDataUrlCache!;
+        }
       }
     }
   }
@@ -626,7 +645,9 @@ body {
         SnackBar(content: Text('Failed to bulk print: $e')),
       );
     } finally {
-      if (mounted) setState(() => _bulkPrinting = false);
+      if (mounted) {
+        setState(() => _bulkPrinting = false);
+      }
     }
   }
 
@@ -688,7 +709,6 @@ body {
 
       if (_uniqueCode == code) {
         setState(() {
-          _selectedLab = null;
           _pcCtrl.clear();
           _pcLabel = null;
           _uniqueCode = null;
@@ -703,6 +723,105 @@ body {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to delete PC: $e')),
+      );
+    }
+  }
+
+  Future<void> _deleteAllInRoom() async {
+    final lab = _selectedLab;
+
+    if (lab == null || lab.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select a room first')),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete All PCs'),
+        content: Text(
+          'Are you sure you want to delete ALL PCs in room $lab?\n\nThis will also delete related reports and incident reports.\n\nThis cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete All'),
+          ),
+        ],
+      ),
+    ) ??
+        false;
+
+    if (!confirmed) return;
+
+    try {
+      final pcSnap = await FirebaseFirestore.instance
+          .collection('pcs')
+          .where('lab', isEqualTo: lab)
+          .get();
+
+      if (pcSnap.docs.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No PCs found in room $lab')),
+        );
+        return;
+      }
+
+      final codes = pcSnap.docs
+          .map((doc) => (doc.data()['code'] ?? doc.id).toString())
+          .toList();
+
+      for (final doc in pcSnap.docs) {
+        await doc.reference.delete();
+      }
+
+      for (final code in codes) {
+        final reportsSnap = await FirebaseFirestore.instance
+            .collection('reports')
+            .where('pc_code', isEqualTo: code)
+            .get();
+
+        for (final doc in reportsSnap.docs) {
+          await doc.reference.delete();
+        }
+
+        final incidentSnap = await FirebaseFirestore.instance
+            .collection('incident_reports')
+            .where('pc_code', isEqualTo: code)
+            .get();
+
+        for (final doc in incidentSnap.docs) {
+          await doc.reference.delete();
+        }
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _pcCtrl.clear();
+        _bulkCtrl.clear();
+        _pcLabel = null;
+        _uniqueCode = null;
+        _qrData = null;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('All PCs in room $lab deleted successfully')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete all PCs: $e')),
       );
     }
   }
@@ -838,6 +957,19 @@ body {
                           child: Text(_saving ? 'Saving...' : 'Save QR'),
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _selectedLab == null ? null : _deleteAllInRoom,
+                          icon: const Icon(Icons.delete_forever),
+                          label: const Text('Delete All in Room'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: 20),
                       const Divider(),
                       const SizedBox(height: 12),
@@ -963,7 +1095,7 @@ body {
                                 data: _qrData!,
                                 size: 300,
                                 embeddedImage: const AssetImage(
-                                  'assets/Images/nu_logo.png',
+                                  'assets/Images/NUSchoolLogo.png',
                                 ),
                                 embeddedImageStyle:
                                 const QrEmbeddedImageStyle(
@@ -1084,11 +1216,24 @@ body {
                                 return aPc.compareTo(bPc);
                               });
 
+                              final isExpanded = _expandedRooms.contains(room);
+
                               return Card(
                                 margin: const EdgeInsets.only(bottom: 12),
                                 elevation: 2,
                                 child: ExpansionTile(
-                                  initiallyExpanded: true,
+                                  key: PageStorageKey('room_$room'),
+                                  initiallyExpanded: false,
+                                  maintainState: true,
+                                  onExpansionChanged: (expanded) {
+                                    setState(() {
+                                      if (expanded) {
+                                        _expandedRooms.add(room);
+                                      } else {
+                                        _expandedRooms.remove(room);
+                                      }
+                                    });
+                                  },
                                   leading: const Icon(Icons.meeting_room),
                                   title: Text(
                                     room,
@@ -1098,6 +1243,30 @@ body {
                                     ),
                                   ),
                                   subtitle: Text('${roomDocs.length} PC(s)'),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      ElevatedButton(
+                                        onPressed: () {
+                                          setState(() {
+                                            _selectedLab = room;
+                                          });
+                                          _deleteAllInRoom();
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.red,
+                                          foregroundColor: Colors.white,
+                                        ),
+                                        child: const Text('Delete All'),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Icon(
+                                        isExpanded
+                                            ? Icons.expand_less
+                                            : Icons.expand_more,
+                                      ),
+                                    ],
+                                  ),
                                   children: roomDocs.map((doc) {
                                     final data = doc.data();
                                     final pc = (data['pc'] ?? '').toString();
