@@ -630,6 +630,83 @@ body {
     }
   }
 
+  Future<void> _deletePcCompletely({
+    required String docId,
+    required String lab,
+    required String pcLabel,
+    required String code,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete PC'),
+        content: Text(
+          'Delete $pcLabel in room $lab?\n\nThis will also remove related reports and incident reports.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    ) ??
+        false;
+
+    if (!confirmed) return;
+
+    try {
+      await FirebaseFirestore.instance.collection('pcs').doc(docId).delete();
+
+      final reportsSnap = await FirebaseFirestore.instance
+          .collection('reports')
+          .where('pc_code', isEqualTo: code)
+          .get();
+
+      for (final doc in reportsSnap.docs) {
+        await doc.reference.delete();
+      }
+
+      final incidentSnap = await FirebaseFirestore.instance
+          .collection('incident_reports')
+          .where('pc_code', isEqualTo: code)
+          .get();
+
+      for (final doc in incidentSnap.docs) {
+        await doc.reference.delete();
+      }
+
+      if (!mounted) return;
+
+      if (_uniqueCode == code) {
+        setState(() {
+          _selectedLab = null;
+          _pcCtrl.clear();
+          _pcLabel = null;
+          _uniqueCode = null;
+          _qrData = null;
+        });
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$pcLabel deleted successfully')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete PC: $e')),
+      );
+    }
+  }
+
   void _loadSavedQr(Map<String, dynamic> data) {
     final pcLabel = (data['pc'] ?? '').toString();
     final pcNumber = _extractPcNumber(pcLabel);
@@ -732,7 +809,8 @@ body {
                                 backgroundColor: Colors.indigo,
                                 foregroundColor: Colors.white,
                               ),
-                              child: Text(_loadingNext ? 'Loading...' : 'Next PC'),
+                              child:
+                              Text(_loadingNext ? 'Loading...' : 'Next PC'),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -851,13 +929,15 @@ body {
                                 children: [
                                   const Text(
                                     "Unique Code",
-                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                    style:
+                                    TextStyle(fontWeight: FontWeight.bold),
                                   ),
                                   const SizedBox(height: 8),
                                   Container(
                                     padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
-                                      border: Border.all(color: Colors.black26),
+                                      border:
+                                      Border.all(color: Colors.black26),
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: SelectableText(
@@ -875,7 +955,8 @@ body {
                             Container(
                               padding: const EdgeInsets.all(18),
                               decoration: BoxDecoration(
-                                border: Border.all(color: Colors.amber, width: 18),
+                                border:
+                                Border.all(color: Colors.amber, width: 18),
                                 color: Colors.white,
                               ),
                               child: QrImageView(
@@ -885,7 +966,9 @@ body {
                                   'assets/Images/nu_logo.png',
                                 ),
                                 embeddedImageStyle:
-                                const QrEmbeddedImageStyle(size: Size(64, 64)),
+                                const QrEmbeddedImageStyle(
+                                  size: Size(64, 64),
+                                ),
                               ),
                             ),
                             const SizedBox(height: 16),
@@ -1026,13 +1109,33 @@ body {
                                           leading: const Icon(Icons.qr_code),
                                           title: Text(pc),
                                           subtitle: Text(code),
-                                          trailing: ElevatedButton(
-                                            onPressed: () => _loadSavedQr(data),
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: Colors.amber,
-                                              foregroundColor: Colors.black,
-                                            ),
-                                            child: const Text('Load'),
+                                          trailing: Wrap(
+                                            spacing: 8,
+                                            children: [
+                                              ElevatedButton(
+                                                onPressed: () => _loadSavedQr(data),
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: Colors.amber,
+                                                  foregroundColor: Colors.black,
+                                                ),
+                                                child: const Text('Load'),
+                                              ),
+                                              ElevatedButton(
+                                                onPressed: () =>
+                                                    _deletePcCompletely(
+                                                      docId: doc.id,
+                                                      lab: (data['lab'] ?? '')
+                                                          .toString(),
+                                                      pcLabel: pc,
+                                                      code: code,
+                                                    ),
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: Colors.red,
+                                                  foregroundColor: Colors.white,
+                                                ),
+                                                child: const Text('Delete PC'),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                         const Divider(height: 1),

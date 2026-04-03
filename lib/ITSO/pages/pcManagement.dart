@@ -16,7 +16,15 @@ class PcManagementPage extends StatefulWidget {
 
 class _PcManagementPageState extends State<PcManagementPage> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  final TextEditingController _roomCtrl = TextEditingController();
+
   String? _selectedLab;
+
+  @override
+  void dispose() {
+    _roomCtrl.dispose();
+    super.dispose();
+  }
 
   Map<String, bool> _normalizePeripherals(dynamic raw) {
     final defaults = <String, bool>{
@@ -49,19 +57,92 @@ class _PcManagementPageState extends State<PcManagementPage> {
     return match == null ? 0 : int.tryParse(match.group(0)!) ?? 0;
   }
 
-  Future<void> _deletePcCompletely({
-    required String docId,
-    required String lab,
-    required String pcLabel,
-    required String code,
-  }) async {
+  Future<void> _showAddRoomDialog() async {
+    _roomCtrl.clear();
+
+    await showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Add Room'),
+        content: TextField(
+          controller: _roomCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Room Name / Number',
+            border: OutlineInputBorder(),
+            hintText: 'ex. 706',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final app = AppStateScope.of(context);
+              final room = _roomCtrl.text.trim();
+
+              if (room.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter a room name')),
+                );
+                return;
+              }
+
+              if (app.labs.contains(room)) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Room $room already exists')),
+                );
+                return;
+              }
+
+              await app.addLab(room);
+
+              if (!mounted) return;
+              Navigator.pop(context);
+
+              setState(() {
+                _selectedLab = room;
+              });
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Room $room added successfully')),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteRoom(String room) async {
+    final pcSnap = await FirebaseFirestore.instance
+        .collection('pcs')
+        .where('lab', isEqualTo: room)
+        .get();
+
+    if (pcSnap.docs.isNotEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Cannot delete room $room because it still has ${pcSnap.docs.length} PC(s). Delete or move the PCs first.',
+          ),
+        ),
+      );
+      return;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Delete PC'),
-        content: Text(
-          'Delete $pcLabel in room $lab?\n\nThis will also remove related reports and incident reports.',
-        ),
+        title: const Text('Delete Room'),
+        content: Text('Are you sure you want to delete room $room?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -82,37 +163,20 @@ class _PcManagementPageState extends State<PcManagementPage> {
 
     if (!confirmed) return;
 
-    try {
-      await FirebaseFirestore.instance.collection('pcs').doc(docId).delete();
+    final app = AppStateScope.of(context);
+    await app.removeLab(room);
 
-      final reportsSnap = await FirebaseFirestore.instance
-          .collection('reports')
-          .where('pc_code', isEqualTo: code)
-          .get();
+    if (!mounted) return;
 
-      for (final doc in reportsSnap.docs) {
-        await doc.reference.delete();
+    setState(() {
+      if (_selectedLab == room) {
+        _selectedLab = null;
       }
+    });
 
-      final incidentSnap = await FirebaseFirestore.instance
-          .collection('incident_reports')
-          .where('pc_code', isEqualTo: code)
-          .get();
-
-      for (final doc in incidentSnap.docs) {
-        await doc.reference.delete();
-      }
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$pcLabel deleted successfully')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete PC: $e')),
-      );
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Room $room deleted successfully')),
+    );
   }
 
   @override
@@ -154,23 +218,59 @@ class _PcManagementPageState extends State<PcManagementPage> {
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              DropdownButtonFormField<String>(
-                value: _selectedLab,
-                decoration: const InputDecoration(
-                  labelText: 'Select Lab Room',
-                  border: OutlineInputBorder(),
-                ),
-                items: labs.map((lab) {
-                  return DropdownMenuItem<String>(
-                    value: lab,
-                    child: Text(lab),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedLab = value;
-                  });
-                },
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedLab,
+                      decoration: const InputDecoration(
+                        labelText: 'Select Lab Room',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: labs.map((lab) {
+                        return DropdownMenuItem<String>(
+                          value: lab,
+                          child: Text(lab),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedLab = value;
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  ElevatedButton.icon(
+                    onPressed: _showAddRoomDialog,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 18,
+                      ),
+                    ),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add Room'),
+                  ),
+                  const SizedBox(width: 10),
+                  ElevatedButton.icon(
+                    onPressed: _selectedLab == null
+                        ? null
+                        : () => _deleteRoom(_selectedLab!),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 18,
+                      ),
+                    ),
+                    icon: const Icon(Icons.delete),
+                    label: const Text('Delete Room'),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
               if (_selectedLab != null)
@@ -350,23 +450,6 @@ class _PcManagementPageState extends State<PcManagementPage> {
                                     foregroundColor: Colors.black,
                                   ),
                                   child: const Text('PC History'),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton(
-                                  onPressed: () => _deletePcCompletely(
-                                    docId: doc.id,
-                                    lab: lab,
-                                    pcLabel: pcLabel,
-                                    code: code,
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.red,
-                                    foregroundColor: Colors.white,
-                                  ),
-                                  child: const Text('Delete PC'),
                                 ),
                               ),
                               if (hasProblem) ...[
