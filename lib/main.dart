@@ -4,6 +4,7 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 
 // Teacher
 import 'Teachers/teacherapp/login/screens/login_screen.dart';
+import 'Teachers/teacherapp/login/screens/splash_screen.dart';
 
 // ITSO
 import 'ITSO/landingITso.dart';
@@ -101,7 +102,7 @@ class TeacherApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Teacher App',
-      home: const TeacherLoginScreen(),
+      home: const SplashScreen(),
     );
   }
 }
