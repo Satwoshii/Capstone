@@ -11,6 +11,12 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../app_state.dart';
 import '../widgets/itso_drawer.dart';
 
+// ── NU Clark Brand Colors ──────────────────────────────────────────────────────
+const Color _nuDarkBlue = Color(0xFF001A52);
+const Color _nuBlue     = Color(0xFF003087);
+const Color _nuGold     = Color(0xFFFFD700);
+const Color _nuWhite    = Color(0xFFF8F9FF);
+
 class QrManagementPage extends StatefulWidget {
   const QrManagementPage({super.key});
 
@@ -19,9 +25,9 @@ class QrManagementPage extends StatefulWidget {
 }
 
 class _QrManagementPageState extends State<QrManagementPage> {
-  final _scaffoldKey = GlobalKey<ScaffoldState>();
-  final TextEditingController _pcCtrl = TextEditingController();
-  final TextEditingController _bulkCtrl = TextEditingController();
+  final _scaffoldKey  = GlobalKey<ScaffoldState>();
+  final _pcCtrl       = TextEditingController();
+  final _bulkCtrl     = TextEditingController();
 
   String? _selectedLab;
   String? _qrData;
@@ -29,12 +35,12 @@ class _QrManagementPageState extends State<QrManagementPage> {
   String? _pcLabel;
   String? _logoDataUrlCache;
 
-  bool _loadingNext = false;
-  bool _saving = false;
-  bool _bulkGenerating = false;
-  bool _bulkPrinting = false;
+  bool _loadingNext     = false;
+  bool _saving          = false;
+  bool _bulkGenerating  = false;
+  bool _bulkPrinting    = false;
 
-  final Set<String> _expandedRooms = <String>{};
+  final Set<String> _expandedRooms = {};
 
   @override
   void dispose() {
@@ -43,6 +49,7 @@ class _QrManagementPageState extends State<QrManagementPage> {
     super.dispose();
   }
 
+  // ── Helpers (ALL ORIGINAL — UNTOUCHED) ──────────────────────────────────────
   int _extractPcNumber(String value) {
     final match = RegExp(r'\d+').firstMatch(value);
     if (match == null) return 0;
@@ -55,1275 +62,989 @@ class _QrManagementPageState extends State<QrManagementPage> {
         .toRadixString(16)
         .substring(8)
         .toUpperCase();
-
     return "$lab-PC$pc-$rand";
   }
 
-  String _buildQrUrl(String code) {
-    return "https://test-1fc5d.web.app/scan?code=$code";
+  String _buildQrUrl(String code) =>
+      "https://test-1fc5d.web.app/scan?code=$code";
+
+  void _snack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: _nuDarkBlue,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    ));
   }
 
   Future<void> _nextPc() async {
     final lab = _selectedLab;
-    if (lab == null || lab.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a room first')),
-      );
-      return;
-    }
-
+    if (lab == null || lab.isEmpty) { _snack('Please select a room first'); return; }
     setState(() => _loadingNext = true);
-
     try {
       final snapshot = await FirebaseFirestore.instance
-          .collection('pcs')
-          .where('lab', isEqualTo: lab)
-          .get();
-
+          .collection('pcs').where('lab', isEqualTo: lab).get();
       int highest = 0;
       for (final doc in snapshot.docs) {
-        final pc = (doc.data()['pc'] ?? '').toString();
-        final num = _extractPcNumber(pc);
+        final num = _extractPcNumber((doc.data()['pc'] ?? '').toString());
         if (num > highest) highest = num;
       }
-
       _pcCtrl.text = '${highest + 1}';
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to get next PC number: $e')),
-      );
+      _snack('Failed to get next PC number: $e');
     } finally {
-      if (mounted) {
-        setState(() => _loadingNext = false);
-      }
+      if (mounted) setState(() => _loadingNext = false);
     }
   }
 
   Future<void> _generatePreview() async {
     final app = AppStateScope.of(context);
     final lab = _selectedLab ?? '';
-    final pc = _pcCtrl.text.trim();
-
-    if (lab.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a Lab Room')),
-      );
-      return;
-    }
-
+    final pc  = _pcCtrl.text.trim();
+    if (lab.isEmpty)  { _snack('Please select a Lab Room'); return; }
     if (pc.isEmpty || int.tryParse(pc) == null || int.parse(pc) <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid PC number')),
-      );
-      return;
+      _snack('Enter a valid PC number'); return;
     }
-
-    if (!app.isValidLab(lab)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid Lab Room')),
-      );
-      return;
-    }
-
+    if (!app.isValidLab(lab)) { _snack('Invalid Lab Room'); return; }
     final uniqueCode = _generateUniqueCode(lab, pc);
-    final url = _buildQrUrl(uniqueCode);
-
-    setState(() {
-      _pcLabel = 'PC $pc';
-      _uniqueCode = uniqueCode;
-      _qrData = url;
-    });
+    setState(() { _pcLabel = 'PC $pc'; _uniqueCode = uniqueCode; _qrData = _buildQrUrl(uniqueCode); });
   }
 
   Future<void> _saveSingleQr() async {
     final app = AppStateScope.of(context);
     final lab = _selectedLab ?? '';
-    final pc = _pcCtrl.text.trim();
-
-    if (lab.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a Lab Room')),
-      );
-      return;
-    }
-
+    final pc  = _pcCtrl.text.trim();
+    if (lab.isEmpty)  { _snack('Please select a Lab Room'); return; }
     if (pc.isEmpty || int.tryParse(pc) == null || int.parse(pc) <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid PC number')),
-      );
-      return;
+      _snack('Enter a valid PC number'); return;
     }
-
-    if (!app.isValidLab(lab)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid Lab Room')),
-      );
-      return;
-    }
-
+    if (!app.isValidLab(lab)) { _snack('Invalid Lab Room'); return; }
     setState(() => _saving = true);
-
     try {
       final existingPc = await FirebaseFirestore.instance
           .collection('pcs')
           .where('lab', isEqualTo: lab)
           .where('pc', isEqualTo: 'PC $pc')
           .get();
-
       if (existingPc.docs.isNotEmpty) {
-        final existingData = existingPc.docs.first.data();
-        final existingCode = (existingData['code'] ?? '').toString();
-        final existingQrData = (existingData['qr_data'] ?? '').toString();
-
+        final d = existingPc.docs.first.data();
+        final existingCode    = (d['code']    ?? '').toString();
+        final existingQrData  = (d['qr_data'] ?? '').toString();
         setState(() {
-          _pcLabel = 'PC $pc';
+          _pcLabel    = 'PC $pc';
           _uniqueCode = existingCode;
-          _qrData =
-          existingQrData.isNotEmpty ? existingQrData : _buildQrUrl(existingCode);
+          _qrData     = existingQrData.isNotEmpty ? existingQrData : _buildQrUrl(existingCode);
         });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('PC $pc already exists in $lab')),
-        );
+        _snack('PC $pc already exists in $lab');
         return;
       }
-
       final uniqueCode = _generateUniqueCode(lab, pc);
-      final url = _buildQrUrl(uniqueCode);
-
+      final url        = _buildQrUrl(uniqueCode);
       await FirebaseFirestore.instance.collection('pcs').doc(uniqueCode).set({
-        'lab': lab,
-        'pc': 'PC $pc',
-        'code': uniqueCode,
-        'qr_data': url,
-        'status': 'available',
-        'comment': '',
-        'reported_by': '',
-        'reported_by_name': '',
-        'reported_by_email': '',
-        'created_at': Timestamp.now(),
-        'updated_at': FieldValue.serverTimestamp(),
-        'peripherals': {
-          'keyboard': true,
-          'mouse': true,
-          'monitor': true,
-          'cables': true,
-          'system_unit': true,
-        },
+        'lab': lab, 'pc': 'PC $pc', 'code': uniqueCode, 'qr_data': url,
+        'status': 'available', 'comment': '', 'reported_by': '',
+        'reported_by_name': '', 'reported_by_email': '',
+        'created_at': Timestamp.now(), 'updated_at': FieldValue.serverTimestamp(),
+        'peripherals': { 'keyboard': true, 'mouse': true, 'monitor': true, 'cables': true, 'system_unit': true },
       });
-
-      setState(() {
-        _pcLabel = 'PC $pc';
-        _uniqueCode = uniqueCode;
-        _qrData = url;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('QR generated and saved successfully')),
-      );
+      setState(() { _pcLabel = 'PC $pc'; _uniqueCode = uniqueCode; _qrData = url; });
+      _snack('QR generated and saved successfully');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save QR: $e')),
-      );
+      _snack('Failed to save QR: $e');
     } finally {
-      if (mounted) {
-        setState(() => _saving = false);
-      }
+      if (mounted) setState(() => _saving = false);
     }
   }
 
   Future<void> _generateAllForLab() async {
-    final app = AppStateScope.of(context);
-    final lab = _selectedLab ?? '';
+    final app   = AppStateScope.of(context);
+    final lab   = _selectedLab ?? '';
     final count = int.tryParse(_bulkCtrl.text.trim());
-
-    if (lab.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a Lab Room')),
-      );
-      return;
-    }
-
-    if (!app.isValidLab(lab)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid Lab Room')),
-      );
-      return;
-    }
-
-    if (count == null || count <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid total PC count')),
-      );
-      return;
-    }
-
+    if (lab.isEmpty)             { _snack('Please select a Lab Room'); return; }
+    if (!app.isValidLab(lab))    { _snack('Invalid Lab Room'); return; }
+    if (count == null || count <= 0) { _snack('Enter a valid total PC count'); return; }
     setState(() => _bulkGenerating = true);
-
     try {
       final existingSnapshot = await FirebaseFirestore.instance
-          .collection('pcs')
-          .where('lab', isEqualTo: lab)
-          .get();
-
+          .collection('pcs').where('lab', isEqualTo: lab).get();
       final existingPcLabels = existingSnapshot.docs
-          .map((doc) => (doc.data()['pc'] ?? '').toString())
-          .toSet();
-
+          .map((doc) => (doc.data()['pc'] ?? '').toString()).toSet();
       final batch = FirebaseFirestore.instance.batch();
       int createdCount = 0;
-
       for (int i = 1; i <= count; i++) {
         final pcLabel = 'PC $i';
-
-        if (existingPcLabels.contains(pcLabel)) {
-          continue;
-        }
-
+        if (existingPcLabels.contains(pcLabel)) continue;
         final uniqueCode = _generateUniqueCode(lab, '$i');
-        final url = _buildQrUrl(uniqueCode);
-
-        final docRef = FirebaseFirestore.instance.collection('pcs').doc(uniqueCode);
-
+        final url        = _buildQrUrl(uniqueCode);
+        final docRef     = FirebaseFirestore.instance.collection('pcs').doc(uniqueCode);
         batch.set(docRef, {
-          'lab': lab,
-          'pc': pcLabel,
-          'code': uniqueCode,
-          'qr_data': url,
-          'status': 'available',
-          'comment': '',
-          'reported_by': '',
-          'reported_by_name': '',
-          'reported_by_email': '',
-          'created_at': Timestamp.now(),
-          'updated_at': FieldValue.serverTimestamp(),
-          'peripherals': {
-            'keyboard': true,
-            'mouse': true,
-            'monitor': true,
-            'cables': true,
-            'system_unit': true,
-          },
+          'lab': lab, 'pc': pcLabel, 'code': uniqueCode, 'qr_data': url,
+          'status': 'available', 'comment': '', 'reported_by': '',
+          'reported_by_name': '', 'reported_by_email': '',
+          'created_at': Timestamp.now(), 'updated_at': FieldValue.serverTimestamp(),
+          'peripherals': { 'keyboard': true, 'mouse': true, 'monitor': true, 'cables': true, 'system_unit': true },
         });
-
         createdCount++;
       }
-
-      if (createdCount > 0) {
-        await batch.commit();
-      }
-
+      if (createdCount > 0) await batch.commit();
       if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            createdCount == 0
-                ? 'All PCs already exist in room $lab'
-                : 'Generated $createdCount new QR codes for room $lab',
-          ),
-        ),
-      );
+      _snack(createdCount == 0
+          ? 'All PCs already exist in room $lab'
+          : 'Generated $createdCount new QR codes for room $lab');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to generate all QRs: $e')),
-      );
+      _snack('Failed to generate all QRs: $e');
     } finally {
-      if (mounted) {
-        setState(() => _bulkGenerating = false);
-      }
+      if (mounted) setState(() => _bulkGenerating = false);
     }
   }
 
   Future<String> _loadLogoDataUrl() async {
-    if (_logoDataUrlCache != null) {
-      return _logoDataUrlCache!;
-    }
-
-    try {
-      final bytes = await rootBundle.load('assets/Image/NUSchoolLogo.png');
-      final b64 = base64Encode(bytes.buffer.asUint8List());
-      _logoDataUrlCache = 'data:image/png;base64,$b64';
-      return _logoDataUrlCache!;
-    } catch (_) {
+    if (_logoDataUrlCache != null) return _logoDataUrlCache!;
+    for (final path in ['assets/Image/NUSchoolLogo.png', 'assets/Images/NUSchoolLogo.png', 'assets/Images/nu_logo.png']) {
       try {
-        final bytes = await rootBundle.load('assets/Images/NUSchoolLogo.png');
-        final b64 = base64Encode(bytes.buffer.asUint8List());
+        final bytes = await rootBundle.load(path);
+        final b64   = base64Encode(bytes.buffer.asUint8List());
         _logoDataUrlCache = 'data:image/png;base64,$b64';
         return _logoDataUrlCache!;
-      } catch (_) {
-        try {
-          final bytes = await rootBundle.load('assets/Images/nu_logo.png');
-          final b64 = base64Encode(bytes.buffer.asUint8List());
-          _logoDataUrlCache = 'data:image/png;base64,$b64';
-          return _logoDataUrlCache!;
-        } catch (_) {
-          _logoDataUrlCache = '';
-          return _logoDataUrlCache!;
-        }
-      }
+      } catch (_) {}
     }
+    _logoDataUrlCache = '';
+    return _logoDataUrlCache!;
   }
 
   Future<String> _qrToBase64(String data) async {
     final painter = QrPainter(
-      data: data,
-      version: QrVersions.auto,
-      gapless: true,
+      data: data, version: QrVersions.auto, gapless: true,
       errorCorrectionLevel: QrErrorCorrectLevel.Q,
     );
-
-    final picData = await painter.toImageData(
-      800,
-      format: ui.ImageByteFormat.png,
-    );
-
-    if (picData == null) {
-      throw Exception('Failed to render QR image');
-    }
-
-    final bytes = Uint8List.view(picData.buffer);
-    return 'data:image/png;base64,${base64Encode(bytes)}';
+    final picData = await painter.toImageData(800, format: ui.ImageByteFormat.png);
+    if (picData == null) throw Exception('Failed to render QR image');
+    return 'data:image/png;base64,${base64Encode(Uint8List.view(picData.buffer))}';
   }
 
   Future<void> _printSingleQr() async {
     if (_qrData == null) return;
-
-    final qrBase64 = await _qrToBase64(_qrData!);
-    final logoDataUrl = await _loadLogoDataUrl();
-
-    final logoHtml = logoDataUrl.isEmpty
-        ? ''
-        : '''
-<div class="logo-bg"></div>
-<img class="logo" src="$logoDataUrl">
-''';
-
-    final htmlContent = '''
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Print QR</title>
-<style>
-body{
-margin:0;
-display:flex;
-align-items:center;
-justify-content:center;
-height:100vh;
-background:white;
-font-family: Arial, sans-serif;
-}
-.wrap{
-text-align:center;
-}
-.frame{
-padding:24px;
-border:24px solid #FFC107;
-display:inline-block;
-background:white;
-}
-.qrwrap{
-position:relative;
-}
-.qr{
-width:512px;
-height:512px;
-display:block;
-}
-.logo-bg{
-position:absolute;
-top:50%;
-left:50%;
-width:120px;
-height:120px;
-transform:translate(-50%,-50%);
-background:white;
-border-radius:12px;
-}
-.logo{
-position:absolute;
-top:50%;
-left:50%;
-width:96px;
-height:96px;
-transform:translate(-50%,-50%);
-}
-.meta{
-margin-top:14px;
-font-weight:bold;
-}
-.code{
-margin-top:6px;
-font-size:14px;
-}
-</style>
-</head>
-<body>
-<div class="wrap">
-<div class="frame">
-<div class="qrwrap">
-<img class="qr" src="$qrBase64">
-$logoHtml
-</div>
-</div>
+    final qrBase64   = await _qrToBase64(_qrData!);
+    final logoDataUrl= await _loadLogoDataUrl();
+    final logoHtml   = logoDataUrl.isEmpty ? '' :
+    '<div class="logo-bg"></div><img class="logo" src="$logoDataUrl">';
+    final htmlContent = '''<!DOCTYPE html><html><head><meta charset="utf-8"><title>Print QR</title>
+<style>body{margin:0;display:flex;align-items:center;justify-content:center;height:100vh;background:white;font-family:Arial,sans-serif}
+.wrap{text-align:center}.frame{padding:24px;border:24px solid #FFD700;display:inline-block;background:white}
+.qrwrap{position:relative}.qr{width:512px;height:512px;display:block}
+.logo-bg{position:absolute;top:50%;left:50%;width:120px;height:120px;transform:translate(-50%,-50%);background:white;border-radius:12px}
+.logo{position:absolute;top:50%;left:50%;width:96px;height:96px;transform:translate(-50%,-50%)}
+.meta{margin-top:14px;font-weight:bold}.code{margin-top:6px;font-size:14px}</style></head>
+<body><div class="wrap"><div class="frame"><div class="qrwrap"><img class="qr" src="$qrBase64">$logoHtml</div></div>
 <div class="meta">${_selectedLab ?? ''} - ${_pcLabel ?? ''}</div>
-<div class="code">${_uniqueCode ?? ''}</div>
-</div>
-<script>
-window.onload=function(){
-setTimeout(function(){
-window.print();
-},300);
-};
-window.onafterprint=function(){
-window.close();
-};
-</script>
-</body>
-</html>
-''';
-
-    final pageUrl =
-    html.Url.createObjectUrlFromBlob(html.Blob([htmlContent], 'text/html'));
-
+<div class="code">${_uniqueCode ?? ''}</div></div>
+<script>window.onload=function(){setTimeout(function(){window.print();},300)};window.onafterprint=function(){window.close()}</script>
+</body></html>''';
+    final pageUrl = html.Url.createObjectUrlFromBlob(html.Blob([htmlContent], 'text/html'));
     html.window.open(pageUrl, '_blank');
   }
 
   Future<void> _bulkPrint() async {
     final lab = _selectedLab;
-    if (lab == null || lab.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a room')),
-      );
-      return;
-    }
-
+    if (lab == null || lab.isEmpty) { _snack('Please select a room'); return; }
     setState(() => _bulkPrinting = true);
-
     try {
       final snapshot = await FirebaseFirestore.instance
-          .collection('pcs')
-          .where('lab', isEqualTo: lab)
-          .get();
-
+          .collection('pcs').where('lab', isEqualTo: lab).get();
       final docs = snapshot.docs.toList()
-        ..sort((a, b) {
-          final aPc = _extractPcNumber((a.data()['pc'] ?? '').toString());
-          final bPc = _extractPcNumber((b.data()['pc'] ?? '').toString());
-          return aPc.compareTo(bPc);
-        });
-
-      if (docs.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No saved QRs in this room')),
-        );
-        return;
-      }
-
+        ..sort((a, b) => _extractPcNumber((a.data()['pc'] ?? '').toString())
+            .compareTo(_extractPcNumber((b.data()['pc'] ?? '').toString())));
+      if (docs.isEmpty) { _snack('No saved QRs in this room'); return; }
       final logoDataUrl = await _loadLogoDataUrl();
       final cards = <String>[];
-
       for (final doc in docs) {
-        final data = doc.data();
-        final qrData = (data['qr_data'] ?? '').toString();
-        final code = (data['code'] ?? '').toString();
-        final room = (data['lab'] ?? '').toString();
-        final pc = (data['pc'] ?? '').toString();
-
+        final data    = doc.data();
+        final qrData  = (data['qr_data'] ?? '').toString();
+        final code    = (data['code']    ?? '').toString();
+        final room    = (data['lab']     ?? '').toString();
+        final pc      = (data['pc']      ?? '').toString();
         if (qrData.isEmpty) continue;
-
         final qrBase64 = await _qrToBase64(qrData);
-
-        final logoHtml = logoDataUrl.isEmpty
-            ? ''
-            : '''
-<div class="logo-bg"></div>
-<img class="logo" src="$logoDataUrl">
-''';
-
-        cards.add('''
-<div class="card">
-  <div class="frame">
-    <div class="qrwrap">
-      <img class="qr" src="$qrBase64" />
-      $logoHtml
-    </div>
-  </div>
-  <div class="meta">$room - $pc</div>
-  <div class="code">$code</div>
-</div>
-''');
+        final logoHtml = logoDataUrl.isEmpty ? '' :
+        '<div class="logo-bg"></div><img class="logo" src="$logoDataUrl">';
+        cards.add('<div class="card"><div class="frame"><div class="qrwrap"><img class="qr" src="$qrBase64">$logoHtml</div></div><div class="meta">$room - $pc</div><div class="code">$code</div></div>');
       }
-
-      final htmlContent = '''
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Bulk Print</title>
-<style>
-body {
-  font-family: Arial, sans-serif;
-  padding: 20px;
-  background: white;
-}
-.grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-}
-.card {
-  border: 1px solid #ccc;
-  padding: 12px;
-  text-align: center;
-  break-inside: avoid;
-  page-break-inside: avoid;
-}
-.frame{
-  padding:12px;
-  border:12px solid #FFC107;
-  display:inline-block;
-  background:white;
-}
-.qrwrap{
-  position:relative;
-}
-.qr{
-  width:180px;
-  height:180px;
-  display:block;
-}
-.logo-bg{
-  position:absolute;
-  top:50%;
-  left:50%;
-  width:44px;
-  height:44px;
-  transform:translate(-50%,-50%);
-  background:white;
-  border-radius:8px;
-}
-.logo{
-  position:absolute;
-  top:50%;
-  left:50%;
-  width:34px;
-  height:34px;
-  transform:translate(-50%,-50%);
-}
-.meta {
-  margin-top: 8px;
-  font-weight: bold;
-}
-.code {
-  font-size: 12px;
-  margin-top: 4px;
-  word-break: break-word;
-}
-</style>
-</head>
-<body>
-  <div class="grid">
-    ${cards.join()}
-  </div>
-  <script>
-    window.onload = function() {
-      setTimeout(function() { window.print(); }, 300);
-    };
-  </script>
-</body>
-</html>
-''';
-
+      final htmlContent = '''<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bulk Print</title>
+<style>body{font-family:Arial,sans-serif;padding:20px;background:white}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.card{border:1px solid #ccc;padding:12px;text-align:center;break-inside:avoid;page-break-inside:avoid}
+.frame{padding:12px;border:12px solid #FFD700;display:inline-block;background:white}
+.qrwrap{position:relative}.qr{width:180px;height:180px;display:block}
+.logo-bg{position:absolute;top:50%;left:50%;width:44px;height:44px;transform:translate(-50%,-50%);background:white;border-radius:8px}
+.logo{position:absolute;top:50%;left:50%;width:34px;height:34px;transform:translate(-50%,-50%)}
+.meta{margin-top:8px;font-weight:bold}.code{font-size:12px;margin-top:4px;word-break:break-word}</style></head>
+<body><div class="grid">${cards.join()}</div>
+<script>window.onload=function(){setTimeout(function(){window.print();},300)}</script></body></html>''';
       final blob = html.Blob([htmlContent], 'text/html');
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      html.window.open(url, '_blank');
+      html.window.open(html.Url.createObjectUrlFromBlob(blob), '_blank');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to bulk print: $e')),
-      );
+      _snack('Failed to bulk print: $e');
     } finally {
-      if (mounted) {
-        setState(() => _bulkPrinting = false);
-      }
+      if (mounted) setState(() => _bulkPrinting = false);
     }
   }
 
   Future<void> _deletePcCompletely({
-    required String docId,
-    required String lab,
-    required String pcLabel,
-    required String code,
+    required String docId, required String lab,
+    required String pcLabel, required String code,
   }) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Delete PC'),
-        content: Text(
-          'Delete $pcLabel in room $lab?\n\nThis will also remove related reports and incident reports.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    ) ??
-        false;
-
+    final confirmed = await _confirmDialog(
+      title: 'Delete PC',
+      message: 'Delete $pcLabel in room $lab?\n\nThis will also remove related reports and incident reports.',
+      confirmLabel: 'Delete',
+      isDanger: true,
+    );
     if (!confirmed) return;
-
     try {
       await FirebaseFirestore.instance.collection('pcs').doc(docId).delete();
-
-      final reportsSnap = await FirebaseFirestore.instance
-          .collection('reports')
-          .where('pc_code', isEqualTo: code)
-          .get();
-
-      for (final doc in reportsSnap.docs) {
-        await doc.reference.delete();
+      for (final col in ['reports', 'incident_reports']) {
+        final snap = await FirebaseFirestore.instance
+            .collection(col).where('pc_code', isEqualTo: code).get();
+        for (final doc in snap.docs) await doc.reference.delete();
       }
-
-      final incidentSnap = await FirebaseFirestore.instance
-          .collection('incident_reports')
-          .where('pc_code', isEqualTo: code)
-          .get();
-
-      for (final doc in incidentSnap.docs) {
-        await doc.reference.delete();
-      }
-
       if (!mounted) return;
-
-      if (_uniqueCode == code) {
-        setState(() {
-          _pcCtrl.clear();
-          _pcLabel = null;
-          _uniqueCode = null;
-          _qrData = null;
-        });
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$pcLabel deleted successfully')),
-      );
+      if (_uniqueCode == code) setState(() { _pcCtrl.clear(); _pcLabel = null; _uniqueCode = null; _qrData = null; });
+      _snack('$pcLabel deleted successfully');
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete PC: $e')),
-      );
+      _snack('Failed to delete PC: $e');
     }
   }
 
   Future<void> _deleteAllInRoom() async {
     final lab = _selectedLab;
-
-    if (lab == null || lab.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a room first')),
-      );
-      return;
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Delete All PCs'),
-        content: Text(
-          'Are you sure you want to delete ALL PCs in room $lab?\n\nThis will also delete related reports and incident reports.\n\nThis cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Delete All'),
-          ),
-        ],
-      ),
-    ) ??
-        false;
-
+    if (lab == null || lab.isEmpty) { _snack('Select a room first'); return; }
+    final confirmed = await _confirmDialog(
+      title: 'Delete All PCs',
+      message: 'Delete ALL PCs in room $lab?\n\nThis will also delete related reports and incident reports.\n\nThis cannot be undone.',
+      confirmLabel: 'Delete All',
+      isDanger: true,
+    );
     if (!confirmed) return;
-
     try {
       final pcSnap = await FirebaseFirestore.instance
-          .collection('pcs')
-          .where('lab', isEqualTo: lab)
-          .get();
-
-      if (pcSnap.docs.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No PCs found in room $lab')),
-        );
-        return;
-      }
-
-      final codes = pcSnap.docs
-          .map((doc) => (doc.data()['code'] ?? doc.id).toString())
-          .toList();
-
-      for (final doc in pcSnap.docs) {
-        await doc.reference.delete();
-      }
-
+          .collection('pcs').where('lab', isEqualTo: lab).get();
+      if (pcSnap.docs.isEmpty) { _snack('No PCs found in room $lab'); return; }
+      final codes = pcSnap.docs.map((doc) => (doc.data()['code'] ?? doc.id).toString()).toList();
+      for (final doc in pcSnap.docs) await doc.reference.delete();
       for (final code in codes) {
-        final reportsSnap = await FirebaseFirestore.instance
-            .collection('reports')
-            .where('pc_code', isEqualTo: code)
-            .get();
-
-        for (final doc in reportsSnap.docs) {
-          await doc.reference.delete();
-        }
-
-        final incidentSnap = await FirebaseFirestore.instance
-            .collection('incident_reports')
-            .where('pc_code', isEqualTo: code)
-            .get();
-
-        for (final doc in incidentSnap.docs) {
-          await doc.reference.delete();
+        for (final col in ['reports', 'incident_reports']) {
+          final snap = await FirebaseFirestore.instance
+              .collection(col).where('pc_code', isEqualTo: code).get();
+          for (final doc in snap.docs) await doc.reference.delete();
         }
       }
-
       if (!mounted) return;
-
-      setState(() {
-        _pcCtrl.clear();
-        _bulkCtrl.clear();
-        _pcLabel = null;
-        _uniqueCode = null;
-        _qrData = null;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('All PCs in room $lab deleted successfully')),
-      );
+      setState(() { _pcCtrl.clear(); _bulkCtrl.clear(); _pcLabel = null; _uniqueCode = null; _qrData = null; });
+      _snack('All PCs in room $lab deleted successfully');
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete all PCs: $e')),
-      );
+      _snack('Failed to delete all PCs: $e');
     }
+  }
+
+  Future<bool> _confirmDialog({
+    required String title, required String message,
+    required String confirmLabel, bool isDanger = false,
+  }) async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (_) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        child: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                color: _nuDarkBlue,
+                width: double.infinity,
+                child: Text(title, style: const TextStyle(color: _nuWhite, fontSize: 15, fontWeight: FontWeight.w700)),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(message, style: const TextStyle(fontSize: 14, height: 1.6)),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFFE5E7EB)))),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isDanger ? const Color(0xFFE24B4A) : _nuDarkBlue,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: Text(confirmLabel),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ) ?? false;
   }
 
   void _loadSavedQr(Map<String, dynamic> data) {
-    final pcLabel = (data['pc'] ?? '').toString();
+    final pcLabel  = (data['pc'] ?? '').toString();
     final pcNumber = _extractPcNumber(pcLabel);
-
     setState(() {
-      _selectedLab = (data['lab'] ?? '').toString();
+      _selectedLab = (data['lab']     ?? '').toString();
       _pcCtrl.text = pcNumber > 0 ? '$pcNumber' : '';
-      _pcLabel = pcLabel;
-      _uniqueCode = (data['code'] ?? '').toString();
-      _qrData = (data['qr_data'] ?? '').toString();
+      _pcLabel     = pcLabel;
+      _uniqueCode  = (data['code']    ?? '').toString();
+      _qrData      = (data['qr_data'] ?? '').toString();
     });
   }
 
+  // ── Build ────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context).colorScheme;
     final app = AppStateScope.of(context);
 
     return Scaffold(
       key: _scaffoldKey,
+      backgroundColor: const Color(0xFFF4F5F8),
       drawer: const ItsoDrawer(),
+
+      // ── AppBar ──────────────────────────────────────────────────────────────
       appBar: AppBar(
+        backgroundColor: _nuDarkBlue,
+        elevation: 0,
+        toolbarHeight: 64,
         leading: IconButton(
-          icon: const Icon(Icons.menu, color: Colors.white),
+          icon: const Icon(Icons.menu, color: _nuGold, size: 26),
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
-        backgroundColor: color.primary,
-        title: const Text(
-          "ITSO View",
-          style: TextStyle(color: Colors.white),
+        title: Row(
+          children: [
+            Container(
+              width: 38, height: 38,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle, color: Colors.white,
+                border: Border.all(color: _nuGold, width: 2),
+              ),
+              child: ClipOval(
+                child: Image.asset('assets/Images/NUSchoolLogo.png', fit: BoxFit.contain),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('QR MANAGEMENT',
+                    style: TextStyle(color: _nuWhite, fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 2)),
+                Text('NATIONAL UNIVERSITY CLARK · ITSO',
+                    style: TextStyle(color: _nuGold.withOpacity(0.85), fontSize: 10, fontWeight: FontWeight.w500, letterSpacing: 2)),
+              ],
+            ),
+          ],
         ),
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(4),
-          child: SizedBox(
-            height: 4,
-            child: ColoredBox(color: Colors.amber),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(3),
+          child: Container(height: 3, color: _nuGold),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new, color: _nuGold, size: 18),
+            onPressed: () => Navigator.pop(context),
           ),
-        ),
+          const SizedBox(width: 8),
+        ],
       ),
+
+      // ── Body ────────────────────────────────────────────────────────────────
       body: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(28),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              flex: 3,
+
+            // ── LEFT COLUMN: Controls ─────────────────────────────────────────
+            SizedBox(
+              width: 280,
               child: SingleChildScrollView(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.black12),
-                    borderRadius: BorderRadius.circular(12),
-                    color: Colors.white,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Single QR",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      const Text("Select Lab Room"),
-                      const SizedBox(height: 6),
-                      DropdownButtonFormField<String>(
-                        value:
-                        app.labs.contains(_selectedLab) ? _selectedLab : null,
-                        items: app.labs
-                            .map(
-                              (lab) => DropdownMenuItem(
-                            value: lab,
-                            child: Text(lab),
-                          ),
-                        )
-                            .toList(),
-                        onChanged: (v) => setState(() => _selectedLab = v),
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _pcCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: "Input PC Number",
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
+                child: Column(
+                  children: [
+                    // Single QR panel
+                    _NuPanel(
+                      dotColor: _nuGold,
+                      title: 'Single QR Generator',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: _loadingNext ? null : _nextPc,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.indigo,
-                                foregroundColor: Colors.white,
-                              ),
-                              child:
-                              Text(_loadingNext ? 'Loading...' : 'Next PC'),
-                            ),
+                          _FieldLabel('LAB ROOM'),
+                          DropdownButtonFormField<String>(
+                            value: app.labs.contains(_selectedLab) ? _selectedLab : null,
+                            items: app.labs.map((lab) =>
+                                DropdownMenuItem(value: lab, child: Text(lab))).toList(),
+                            onChanged: (v) => setState(() => _selectedLab = v),
+                            decoration: _inputDeco(),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: _generatePreview,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.amber,
-                                foregroundColor: Colors.black,
-                              ),
-                              child: const Text("Generate Preview"),
-                            ),
+                          const SizedBox(height: 14),
+                          _FieldLabel('PC NUMBER'),
+                          TextField(
+                            controller: _pcCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: _inputDeco(hint: 'e.g. 12'),
+                          ),
+                          const SizedBox(height: 14),
+                          Row(
+                            children: [
+                              Expanded(child: _OutlineBtn(
+                                label: _loadingNext ? 'Loading…' : 'Next PC',
+                                onTap: _loadingNext ? null : _nextPc,
+                                icon: Icons.skip_next,
+                              )),
+                              const SizedBox(width: 8),
+                              Expanded(child: _GoldBtn(
+                                label: 'Preview',
+                                onTap: _generatePreview,
+                                icon: Icons.qr_code,
+                              )),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          _NavyBtn(
+                            label: _saving ? 'Saving…' : 'Save QR',
+                            onTap: _saving ? null : _saveSingleQr,
+                            icon: Icons.save_outlined,
+                          ),
+                          const SizedBox(height: 6),
+                          _DangerBtn(
+                            label: 'Delete All in Room',
+                            onTap: _selectedLab == null ? null : _deleteAllInRoom,
+                            icon: Icons.delete_forever_outlined,
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _saving ? null : _saveSingleQr,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Bulk panel
+                    _NuPanel(
+                      dotColor: const Color(0xFFE24B4A),
+                      title: 'Bulk Generator',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _FieldLabel('TOTAL PCs IN LAB'),
+                          TextField(
+                            controller: _bulkCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: _inputDeco(hint: 'e.g. 40'),
                           ),
-                          child: Text(_saving ? 'Saving...' : 'Save QR'),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: _selectedLab == null ? null : _deleteAllInRoom,
-                          icon: const Icon(Icons.delete_forever),
-                          label: const Text('Delete All in Room'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
+                          const SizedBox(height: 14),
+                          _NavyBtn(
+                            label: _bulkGenerating ? 'Generating…' : 'Generate All QRs',
+                            onTap: _bulkGenerating ? null : _generateAllForLab,
+                            icon: Icons.auto_awesome_outlined,
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      const Divider(),
-                      const SizedBox(height: 12),
-                      const Text(
-                        "Auto Generate Whole Lab",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _bulkCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Total PCs',
-                          border: OutlineInputBorder(),
-                          hintText: 'ex. 40',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _bulkGenerating ? null : _generateAllForLab,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.deepOrange,
-                            foregroundColor: Colors.white,
+                          const SizedBox(height: 6),
+                          _OutlineBtn(
+                            label: _bulkPrinting ? 'Preparing…' : 'Bulk Print',
+                            onTap: _bulkPrinting ? null : _bulkPrint,
+                            icon: Icons.print_outlined,
                           ),
-                          child: Text(
-                            _bulkGenerating
-                                ? 'Generating...'
-                                : 'Generate All QRs',
-                          ),
-                        ),
+                        ],
                       ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _bulkPrinting ? null : _bulkPrint,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black87,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: Text(
-                            _bulkPrinting ? 'Preparing...' : 'Bulk Print',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
+
             const SizedBox(width: 20),
+
+            // ── CENTER: QR Preview ────────────────────────────────────────────
             Expanded(
               flex: 3,
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.black12),
-                  borderRadius: BorderRadius.circular(12),
-                  color: Colors.white,
-                ),
-                child: Column(
+              child: _NuPanel(
+                dotColor: const Color(0xFF639922),
+                title: 'QR Preview',
+                child: _qrData == null
+                    ? SizedBox(
+                  height: 360,
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.qr_code_2, size: 56, color: Colors.black12),
+                        const SizedBox(height: 12),
+                        const Text('Generate or load a QR to preview',
+                            style: TextStyle(color: Colors.black38, fontSize: 14)),
+                      ],
+                    ),
+                  ),
+                )
+                    : Column(
                   children: [
-                    const Text(
-                      'QR Preview',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
+                    // Unique code badge
+                    if (_uniqueCode != null) ...[
+                      const SizedBox(height: 8),
+                      _SectionLabel('UNIQUE CODE'),
+                      const SizedBox(height: 6),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF4F5F8),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: SelectableText(
+                          _uniqueCode!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w700,
+                            letterSpacing: 1.5, color: _nuDarkBlue,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+
+                    // QR frame
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: _nuGold, width: 16),
+                          color: Colors.white,
+                        ),
+                        child: QrImageView(
+                          data: _qrData!,
+                          size: 260,
+                          embeddedImage: const AssetImage('assets/Images/NUSchoolLogo.png'),
+                          embeddedImageStyle: const QrEmbeddedImageStyle(size: Size(56, 56)),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 20),
-                    if (_qrData == null)
-                      const Expanded(
-                        child: Center(
-                          child: Text('Generate or load a QR to preview'),
-                        ),
-                      )
-                    else
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            if (_uniqueCode != null)
-                              Column(
-                                children: [
-                                  const Text(
-                                    "Unique Code",
-                                    style:
-                                    TextStyle(fontWeight: FontWeight.bold),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      border:
-                                      Border.all(color: Colors.black26),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: SelectableText(
-                                      _uniqueCode!,
-                                      style: const TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 2,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 20),
-                                ],
-                              ),
-                            Container(
-                              padding: const EdgeInsets.all(18),
-                              decoration: BoxDecoration(
-                                border:
-                                Border.all(color: Colors.amber, width: 18),
-                                color: Colors.white,
-                              ),
-                              child: QrImageView(
-                                data: _qrData!,
-                                size: 300,
-                                embeddedImage: const AssetImage(
-                                  'assets/Images/NUSchoolLogo.png',
-                                ),
-                                embeddedImageStyle:
-                                const QrEmbeddedImageStyle(
-                                  size: Size(64, 64),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              '${_selectedLab ?? ''} - ${_pcLabel ?? ''}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            if (_qrData != null)
-                              SelectableText(
-                                _qrData!,
-                                style: const TextStyle(fontSize: 12),
-                                textAlign: TextAlign.center,
-                              ),
-                            const SizedBox(height: 20),
-                            ElevatedButton(
-                              onPressed: _printSingleQr,
-                              child: const Text("Print QR"),
-                            ),
-                          ],
-                        ),
+
+                    // Labels
+                    Text(
+                      '${_selectedLab ?? ''} · ${_pcLabel ?? ''}',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _nuDarkBlue),
+                    ),
+                    const SizedBox(height: 6),
+                    SelectableText(
+                      _qrData!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 11, color: Colors.black45),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Print button
+                    Center(
+                      child: _NavyBtn(
+                        label: 'Print QR',
+                        onTap: _printSingleQr,
+                        icon: Icons.print_outlined,
+                        fullWidth: false,
                       ),
+                    ),
+                    const SizedBox(height: 8),
                   ],
                 ),
               ),
             ),
+
             const SizedBox(width: 20),
-            Expanded(
-              flex: 4,
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.black12),
-                  borderRadius: BorderRadius.circular(12),
-                  color: Colors.white,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Saved QR Codes by Room',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                        stream: FirebaseFirestore.instance
-                            .collection('pcs')
-                            .snapshots(),
-                        builder: (context, snapshot) {
-                          if (snapshot.hasError) {
-                            return Center(
-                              child: Text('Error: ${snapshot.error}'),
-                            );
-                          }
 
-                          if (!snapshot.hasData) {
-                            return const Center(
-                              child: CircularProgressIndicator(),
-                            );
-                          }
+            // ── RIGHT COLUMN: Saved QRs ───────────────────────────────────────
+            SizedBox(
+              width: 320,
+              child: _NuPanel(
+                dotColor: const Color(0xFF185FA5),
+                title: 'Saved QR Codes by Room',
+                child: SizedBox(
+                  height: 580,
+                  child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: FirebaseFirestore.instance.collection('pcs').snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return Center(child: Text('Error: ${snapshot.error}'));
+                      }
+                      if (!snapshot.hasData) {
+                        return const Center(child: CircularProgressIndicator(color: _nuDarkBlue));
+                      }
 
-                          final docs = snapshot.data!.docs.toList();
+                      final docs = snapshot.data!.docs.toList()
+                        ..sort((a, b) {
+                          final labCmp = (a.data()['lab'] ?? '').toString()
+                              .compareTo((b.data()['lab'] ?? '').toString());
+                          if (labCmp != 0) return labCmp;
+                          return _extractPcNumber((a.data()['pc'] ?? '').toString())
+                              .compareTo(_extractPcNumber((b.data()['pc'] ?? '').toString()));
+                        });
 
-                          if (docs.isEmpty) {
-                            return const Center(
-                              child: Text('No saved QR codes yet'),
-                            );
-                          }
+                      if (docs.isEmpty) {
+                        return const Center(
+                            child: Text('No saved QR codes yet',
+                                style: TextStyle(color: Colors.black38)));
+                      }
 
-                          docs.sort((a, b) {
-                            final aLab = (a.data()['lab'] ?? '').toString();
-                            final bLab = (b.data()['lab'] ?? '').toString();
-                            final labCompare = aLab.compareTo(bLab);
-                            if (labCompare != 0) return labCompare;
+                      // Group by lab
+                      final grouped = <String, List<QueryDocumentSnapshot<Map<String, dynamic>>>>{};
+                      for (final doc in docs) {
+                        final lab = (doc.data()['lab'] ?? 'Unknown Room').toString();
+                        grouped.putIfAbsent(lab, () => []).add(doc);
+                      }
+                      final roomNames = grouped.keys.toList()..sort();
 
-                            final aPc =
-                            _extractPcNumber((a.data()['pc'] ?? '').toString());
-                            final bPc =
-                            _extractPcNumber((b.data()['pc'] ?? '').toString());
-                            return aPc.compareTo(bPc);
-                          });
+                      return ListView.builder(
+                        itemCount: roomNames.length,
+                        itemBuilder: (context, i) {
+                          final room     = roomNames[i];
+                          final roomDocs = grouped[room]!
+                            ..sort((a, b) => _extractPcNumber((a.data()['pc'] ?? '').toString())
+                                .compareTo(_extractPcNumber((b.data()['pc'] ?? '').toString())));
+                          final isExpanded = _expandedRooms.contains(room);
 
-                          final Map<String,
-                              List<QueryDocumentSnapshot<Map<String, dynamic>>>>
-                          grouped = {};
-
-                          for (final doc in docs) {
-                            final lab =
-                            (doc.data()['lab'] ?? 'Unknown Room').toString();
-                            grouped.putIfAbsent(lab, () => []).add(doc);
-                          }
-
-                          final roomNames = grouped.keys.toList()..sort();
-
-                          return ListView.builder(
-                            itemCount: roomNames.length,
-                            itemBuilder: (context, roomIndex) {
-                              final room = roomNames[roomIndex];
-                              final roomDocs = grouped[room]!;
-
-                              roomDocs.sort((a, b) {
-                                final aPc = _extractPcNumber(
-                                    (a.data()['pc'] ?? '').toString());
-                                final bPc = _extractPcNumber(
-                                    (b.data()['pc'] ?? '').toString());
-                                return aPc.compareTo(bPc);
-                              });
-
-                              final isExpanded = _expandedRooms.contains(room);
-
-                              return Card(
-                                margin: const EdgeInsets.only(bottom: 12),
-                                elevation: 2,
-                                child: ExpansionTile(
-                                  key: PageStorageKey('room_$room'),
-                                  initiallyExpanded: false,
-                                  maintainState: true,
-                                  onExpansionChanged: (expanded) {
-                                    setState(() {
-                                      if (expanded) {
-                                        _expandedRooms.add(room);
-                                      } else {
-                                        _expandedRooms.remove(room);
-                                      }
-                                    });
-                                  },
-                                  leading: const Icon(Icons.meeting_room),
-                                  title: Text(
-                                    room,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
+                          return Column(
+                            children: [
+                              // Room header
+                              InkWell(
+                                onTap: () => setState(() {
+                                  if (isExpanded) _expandedRooms.remove(room);
+                                  else            _expandedRooms.add(room);
+                                }),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: isExpanded ? const Color(0xFFF0F4FF) : Colors.transparent,
+                                    border: const Border(bottom: BorderSide(color: Color(0xFFF3F4F6))),
                                   ),
-                                  subtitle: Text('${roomDocs.length} PC(s)'),
-                                  trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
+                                  child: Row(
                                     children: [
-                                      ElevatedButton(
-                                        onPressed: () {
-                                          setState(() {
-                                            _selectedLab = room;
-                                          });
+                                      Container(
+                                        width: 32, height: 32,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFE8EEF8),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: const Icon(Icons.meeting_room_outlined, size: 16, color: _nuDarkBlue),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(room, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF111827))),
+                                            Text('${roomDocs.length} PC${roomDocs.length != 1 ? 's' : ''}',
+                                                style: const TextStyle(fontSize: 11, color: Colors.black45)),
+                                          ],
+                                        ),
+                                      ),
+                                      // Delete all button for room
+                                      GestureDetector(
+                                        onTap: () {
+                                          setState(() => _selectedLab = room);
                                           _deleteAllInRoom();
                                         },
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.red,
-                                          foregroundColor: Colors.white,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFFCEBEB),
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(color: const Color(0xFFF09595)),
+                                          ),
+                                          child: const Text('Delete All',
+                                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF791F1F))),
                                         ),
-                                        child: const Text('Delete All'),
                                       ),
                                       const SizedBox(width: 8),
-                                      Icon(
-                                        isExpanded
-                                            ? Icons.expand_less
-                                            : Icons.expand_more,
+                                      AnimatedRotation(
+                                        turns: isExpanded ? 0 : -0.25,
+                                        duration: const Duration(milliseconds: 200),
+                                        child: const Icon(Icons.expand_more, size: 18, color: Colors.black38),
                                       ),
                                     ],
                                   ),
-                                  children: roomDocs.map((doc) {
-                                    final data = doc.data();
-                                    final pc = (data['pc'] ?? '').toString();
-                                    final code = (data['code'] ?? '').toString();
+                                ),
+                              ),
 
-                                    return Column(
+                              // PC rows
+                              if (isExpanded)
+                                ...roomDocs.map((doc) {
+                                  final data = doc.data();
+                                  final pc   = (data['pc']   ?? '').toString();
+                                  final code = (data['code'] ?? '').toString();
+                                  return Container(
+                                    padding: const EdgeInsets.fromLTRB(58, 10, 16, 10),
+                                    decoration: const BoxDecoration(
+                                      border: Border(bottom: BorderSide(color: Color(0xFFF9FAFB))),
+                                    ),
+                                    child: Row(
                                       children: [
-                                        ListTile(
-                                          leading: const Icon(Icons.qr_code),
-                                          title: Text(pc),
-                                          subtitle: Text(code),
-                                          trailing: Wrap(
-                                            spacing: 8,
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              ElevatedButton(
-                                                onPressed: () => _loadSavedQr(data),
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: Colors.amber,
-                                                  foregroundColor: Colors.black,
-                                                ),
-                                                child: const Text('Load'),
-                                              ),
-                                              ElevatedButton(
-                                                onPressed: () =>
-                                                    _deletePcCompletely(
-                                                      docId: doc.id,
-                                                      lab: (data['lab'] ?? '')
-                                                          .toString(),
-                                                      pcLabel: pc,
-                                                      code: code,
-                                                    ),
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: Colors.red,
-                                                  foregroundColor: Colors.white,
-                                                ),
-                                                child: const Text('Delete PC'),
-                                              ),
+                                              Text(pc, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
+                                              Text(code, style: const TextStyle(fontSize: 10, color: Colors.black45, fontFamily: 'monospace'), overflow: TextOverflow.ellipsis),
                                             ],
                                           ),
                                         ),
-                                        const Divider(height: 1),
+                                        const SizedBox(width: 8),
+                                        // Load button
+                                        _MiniBtn(label: 'Load', isGold: true, onTap: () => _loadSavedQr(data)),
+                                        const SizedBox(width: 6),
+                                        // Delete button
+                                        _MiniBtn(
+                                          label: 'Delete',
+                                          isDanger: true,
+                                          onTap: () => _deletePcCompletely(
+                                            docId: doc.id,
+                                            lab: (data['lab'] ?? '').toString(),
+                                            pcLabel: pc, code: code,
+                                          ),
+                                        ),
                                       ],
-                                    );
-                                  }).toList(),
-                                ),
-                              );
-                            },
+                                    ),
+                                  );
+                                }),
+                            ],
                           );
                         },
-                      ),
-                    ),
-                  ],
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  InputDecoration _inputDeco({String? hint}) => InputDecoration(
+    hintText: hint,
+    hintStyle: const TextStyle(color: Colors.black26, fontSize: 13),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: Colors.black.withOpacity(0.12)),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: Colors.black.withOpacity(0.12)),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: const BorderSide(color: _nuDarkBlue, width: 1.5),
+    ),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    isDense: true,
+  );
+}
+
+// ── Shared UI Widgets ─────────────────────────────────────────────────────────
+
+class _NuPanel extends StatelessWidget {
+  final Color dotColor;
+  final String title;
+  final Widget child;
+  const _NuPanel({required this.dotColor, required this.title, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.black.withOpacity(0.07)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF9FAFB),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+              border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+            ),
+            child: Row(
+              children: [
+                Container(width: 8, height: 8, decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle)),
+                const SizedBox(width: 8),
+                Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _nuDarkBlue, letterSpacing: 0.3)),
+              ],
+            ),
+          ),
+          Padding(padding: const EdgeInsets.all(20), child: child),
+        ],
+      ),
+    );
+  }
+}
+
+class _FieldLabel extends StatelessWidget {
+  final String text;
+  const _FieldLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text(text, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.black45, letterSpacing: 0.8)),
+  );
+}
+
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  const _SectionLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) =>
+      Text(text, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.black45, letterSpacing: 0.8));
+}
+
+class _NavyBtn extends StatelessWidget {
+  final String label;
+  final VoidCallback? onTap;
+  final IconData? icon;
+  final bool fullWidth;
+  const _NavyBtn({required this.label, this.onTap, this.icon, this.fullWidth = true});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: fullWidth ? double.infinity : null,
+    child: ElevatedButton.icon(
+      onPressed: onTap,
+      icon: icon != null ? Icon(icon, size: 16) : const SizedBox.shrink(),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: _nuDarkBlue,
+        foregroundColor: _nuGold,
+        disabledBackgroundColor: Colors.black12,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+      ),
+    ),
+  );
+}
+
+class _GoldBtn extends StatelessWidget {
+  final String label;
+  final VoidCallback? onTap;
+  final IconData? icon;
+  const _GoldBtn({required this.label, this.onTap, this.icon});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: double.infinity,
+    child: ElevatedButton.icon(
+      onPressed: onTap,
+      icon: icon != null ? Icon(icon, size: 16) : const SizedBox.shrink(),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: _nuGold,
+        foregroundColor: _nuDarkBlue,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+      ),
+    ),
+  );
+}
+
+class _OutlineBtn extends StatelessWidget {
+  final String label;
+  final VoidCallback? onTap;
+  final IconData? icon;
+  const _OutlineBtn({required this.label, this.onTap, this.icon});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: double.infinity,
+    child: OutlinedButton.icon(
+      onPressed: onTap,
+      icon: icon != null ? Icon(icon, size: 16) : const SizedBox.shrink(),
+      label: Text(label),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: _nuDarkBlue,
+        side: const BorderSide(color: _nuDarkBlue, width: 1.5),
+        padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+      ),
+    ),
+  );
+}
+
+class _DangerBtn extends StatelessWidget {
+  final String label;
+  final VoidCallback? onTap;
+  final IconData? icon;
+  const _DangerBtn({required this.label, this.onTap, this.icon});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: double.infinity,
+    child: ElevatedButton.icon(
+      onPressed: onTap,
+      icon: icon != null ? Icon(icon, size: 16) : const SizedBox.shrink(),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFFFCEBEB),
+        foregroundColor: const Color(0xFF791F1F),
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: Color(0xFFF09595)),
+        ),
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+      ),
+    ),
+  );
+}
+
+class _MiniBtn extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  final bool isGold;
+  final bool isDanger;
+  const _MiniBtn({required this.label, required this.onTap, this.isGold = false, this.isDanger = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final bg   = isGold   ? _nuGold                   : isDanger ? const Color(0xFFFCEBEB) : Colors.transparent;
+    final fg   = isGold   ? _nuDarkBlue               : isDanger ? const Color(0xFF791F1F) : _nuDarkBlue;
+    final side = isDanger ? const Color(0xFFF09595)   : _nuDarkBlue;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: side, width: 1.5),
+        ),
+        child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: fg)),
       ),
     );
   }
