@@ -90,24 +90,6 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                           ],
                         ),
                         const Spacer(),
-                        // Sign out
-                        GestureDetector(
-                          onTap: () => _signOut(context),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                  color: _nuGold.withOpacity(0.45)),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text('SIGN OUT',
-                                style: TextStyle(
-                                    color: _nuGold, fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 1.5)),
-                          ),
-                        ),
                       ],
                     ),
                   ),
