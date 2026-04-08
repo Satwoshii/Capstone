@@ -61,7 +61,7 @@ class AiHelperService {
         'comment': comment,
         'peripherals': peripherals,
       };
-
+//ai
       debugPrint('AI HELPER REQUEST: ${jsonEncode(payload)}');
 
       final response = await http.post(
