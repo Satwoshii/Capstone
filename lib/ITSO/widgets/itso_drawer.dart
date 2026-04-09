@@ -4,6 +4,7 @@ import '../pages/login/screens/login_screen.dart';
 import '../pages/reportLog.dart';
 import '../pages/qr_management.dart';
 import '../pages/pcManagement.dart';
+import '../pages/ai_analytic.dart';
 import '../landingITso.dart';
 
 const Color _nuDarkBlue = Color(0xFF001A52);
@@ -141,6 +142,11 @@ class ItsoDrawer extends StatelessWidget {
                       icon: Icons.computer,
                       label: 'PC Management',
                       onTap: () => go(const PcManagementPage()),
+                    ),
+                    _MenuTile(
+                      icon: Icons.auto_graph,
+                      label: 'AI Analytics',
+                      onTap: () => go(const AiAnalyticsPage()),
                     ),
                   ],
                 ),

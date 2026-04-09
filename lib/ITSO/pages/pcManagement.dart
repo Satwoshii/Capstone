@@ -481,7 +481,7 @@ class _PcManagementPageState extends State<PcManagementPage> {
                       itemCount: docs.length,
                       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                         maxCrossAxisExtent: 280,
-                        mainAxisExtent: 400,
+                        mainAxisExtent: 520,
                         crossAxisSpacing: 18,
                         mainAxisSpacing: 18,
                       ),
@@ -496,32 +496,64 @@ class _PcManagementPageState extends State<PcManagementPage> {
                         final peripherals = _normalizePeripherals(data['peripherals']);
                         final hasProblem  = peripherals.values.any((v) => v == false);
 
-                        return _PcCard(
-                          pcLabel:    pcLabel,
-                          hasProblem: hasProblem,
-                          peripherals: peripherals,
-                          onHistory: () => Navigator.push(context,
-                              MaterialPageRoute(builder: (_) => PcHistoryPage(
-                                  lab: lab, pcLabel: pcLabel, code: code))),
-                          onOpenProblem: hasProblem
-                              ? () => Navigator.push(context,
-                              MaterialPageRoute(builder: (_) => ReportViewPage(
-                                docId: doc.id,
-                                lab: lab,
-                                pcLabel: pcLabel,
-                                code: code,
-                                status: {
-                                  'Keyboard':    peripherals['keyboard']    ?? true,
-                                  'Mouse':       peripherals['mouse']       ?? true,
-                                  'Monitor':     peripherals['monitor']     ?? true,
-                                  'Cables':      peripherals['cables']      ?? true,
-                                  'System Unit': peripherals['system_unit'] ?? true,
-                                },
-                                comment:    comment,
-                                reportedBy: reportedBy,
-                              )))
-                              : null,
-                          onDelete: () => _deletePc(doc.id, pcLabel, lab, code),
+                        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                          stream: FirebaseFirestore.instance
+                              .collection('reports')
+                              .where('pc_code', isEqualTo: code)
+                              .snapshots(),
+                          builder: (context, reportSnapshot) {
+                            Map<String, dynamic>? latestReport;
+                            if (reportSnapshot.hasData && reportSnapshot.data!.docs.isNotEmpty) {
+                              final reportDocs = reportSnapshot.data!.docs.toList()
+                                ..sort((a, b) {
+                                  final aTs = a.data()['timestamp'];
+                                  final bTs = b.data()['timestamp'];
+                                  final aDate = aTs is Timestamp ? aTs.toDate() : DateTime(2000);
+                                  final bDate = bTs is Timestamp ? bTs.toDate() : DateTime(2000);
+                                  return bDate.compareTo(aDate);
+                                });
+                              latestReport = reportDocs.first.data();
+                            }
+
+                            final latestFinalReport = (latestReport?['final_report_text'] ?? '').toString();
+                            final latestAttemptSummary = (latestReport?['ai_attempt_summary'] ?? '').toString();
+                            final latestReportedBy = (latestReport?['reported_by'] ?? reportedBy).toString();
+                            final latestComment = latestFinalReport.isEmpty
+                                ? (comment.isEmpty ? 'No report text recorded.' : comment)
+                                : latestFinalReport;
+                            final latestAiAttemptedFix = (latestReport?['ai_attempted_fix'] ?? false) == true;
+
+                            return _PcCard(
+                              pcLabel: pcLabel,
+                              hasProblem: hasProblem,
+                              peripherals: peripherals,
+                              latestReportText: latestComment,
+                              latestAttemptSummary: latestAttemptSummary,
+                              latestAiAttemptedFix: latestAiAttemptedFix,
+                              onHistory: () => Navigator.push(context,
+                                  MaterialPageRoute(builder: (_) => PcHistoryPage(
+                                      lab: lab, pcLabel: pcLabel, code: code))),
+                              onOpenProblem: hasProblem
+                                  ? () => Navigator.push(context,
+                                  MaterialPageRoute(builder: (_) => ReportViewPage(
+                                    docId: doc.id,
+                                    lab: lab,
+                                    pcLabel: pcLabel,
+                                    code: code,
+                                    status: {
+                                      'Keyboard':    peripherals['keyboard']    ?? true,
+                                      'Mouse':       peripherals['mouse']       ?? true,
+                                      'Monitor':     peripherals['monitor']     ?? true,
+                                      'Cables':      peripherals['cables']      ?? true,
+                                      'System Unit': peripherals['system_unit'] ?? true,
+                                    },
+                                    comment: latestComment,
+                                    reportedBy: latestReportedBy,
+                                  )))
+                                  : null,
+                              onDelete: () => _deletePc(doc.id, pcLabel, lab, code),
+                            );
+                          },
                         );
                       },
                     );
@@ -593,6 +625,9 @@ class _PcCard extends StatelessWidget {
   final String pcLabel;
   final bool hasProblem;
   final Map<String, bool> peripherals;
+  final String latestReportText;
+  final String latestAttemptSummary;
+  final bool latestAiAttemptedFix;
   final VoidCallback onHistory;
   final VoidCallback? onOpenProblem;
   final VoidCallback onDelete;
@@ -601,6 +636,9 @@ class _PcCard extends StatelessWidget {
     required this.pcLabel,
     required this.hasProblem,
     required this.peripherals,
+    required this.latestReportText,
+    required this.latestAttemptSummary,
+    required this.latestAiAttemptedFix,
     required this.onHistory,
     required this.onDelete,
     this.onOpenProblem,
@@ -677,6 +715,71 @@ class _PcCard extends StatelessWidget {
           _peripheralRow('Monitor',    peripherals['monitor']     ?? true),
           _peripheralRow('Cables',     peripherals['cables']      ?? true),
           _peripheralRow('System Unit',peripherals['system_unit'] ?? true),
+
+          const SizedBox(height: 10),
+
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.7),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.black.withOpacity(0.06)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Latest AI Report',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: _nuDarkBlue,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: latestAiAttemptedFix ? const Color(0xFFEAF3DE) : const Color(0xFFF3F4F6),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: latestAiAttemptedFix ? const Color(0xFF97C459) : const Color(0xFFD1D5DB),
+                        ),
+                      ),
+                      child: Text(
+                        latestAiAttemptedFix ? 'AI Fix Tried' : 'No AI Fix',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: latestAiAttemptedFix ? const Color(0xFF27500A) : const Color(0xFF4B5563),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  latestReportText.isEmpty ? 'No final report text recorded.' : latestReportText,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11, height: 1.4, color: Color(0xFF374151)),
+                ),
+                if (latestAttemptSummary.trim().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'AI Summary: ' + latestAttemptSummary,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 10, height: 1.35, color: Color(0xFF6B7280)),
+                  ),
+                ],
+              ],
+            ),
+          ),
 
           const Spacer(),
 

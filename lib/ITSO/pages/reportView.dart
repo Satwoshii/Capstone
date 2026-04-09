@@ -110,6 +110,48 @@ class ReportViewPage extends StatelessWidget {
     ));
   }
 
+
+  Future<Map<String, dynamic>?> _loadLatestReport() async {
+    try {
+      final byCode = await FirebaseFirestore.instance
+          .collection('reports')
+          .where('pc_code', isEqualTo: code)
+          .orderBy('created_at', descending: true)
+          .limit(1)
+          .get();
+
+      if (byCode.docs.isNotEmpty) {
+        return byCode.docs.first.data();
+      }
+    } catch (_) {
+      // fallback below if created_at index is missing
+    }
+
+    try {
+      final byCodeNoOrder = await FirebaseFirestore.instance
+          .collection('reports')
+          .where('pc_code', isEqualTo: code)
+          .limit(20)
+          .get();
+
+      if (byCodeNoOrder.docs.isNotEmpty) {
+        final docs = [...byCodeNoOrder.docs];
+        docs.sort((a, b) {
+          final aTs = a.data()['created_at'];
+          final bTs = b.data()['created_at'];
+          final aMs = aTs is Timestamp ? aTs.millisecondsSinceEpoch : 0;
+          final bMs = bTs is Timestamp ? bTs.millisecondsSinceEpoch : 0;
+          return bMs.compareTo(aMs);
+        });
+        return docs.first.data();
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  String _yesNo(bool value) => value ? 'Yes' : 'No';
+
   @override
   Widget build(BuildContext context) {
     final scaffoldKey = GlobalKey<ScaffoldState>();

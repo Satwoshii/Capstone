@@ -52,6 +52,11 @@ class _ReportLogPageState extends State<ReportLogPage> {
       (data['reported_by'] ?? '').toString(),
       (data['repaired_by'] ?? '').toString(),
       (data['action_taken']?? '').toString(),
+      (data['final_report_text'] ?? '').toString(),
+      (data['ai_attempt_summary'] ?? '').toString(),
+      (data['ai_student_tip'] ?? '').toString(),
+      (data['ai_itso_action'] ?? '').toString(),
+      ((data['ai_attempted_fix'] ?? false) == true ? 'yes true attempted fix' : 'no false no attempted fix'),
     ].any((v) => v.toLowerCase().contains(q));
   }
 
@@ -85,6 +90,9 @@ class _ReportLogPageState extends State<ReportLogPage> {
     final reportedBy = (data['reported_by'] ?? 'Unknown').toString();
     final repairedBy = (data['repaired_by'] ?? 'Not recorded').toString();
     final actionTaken= (data['action_taken']?? 'No action recorded').toString();
+    final finalReportText = (data['final_report_text'] ?? '').toString();
+    final aiAttemptSummary = (data['ai_attempt_summary'] ?? '').toString();
+    final aiAttemptedFix = (data['ai_attempted_fix'] ?? false) == true;
     final timestamp  = _formatDate(data['timestamp']);
     final resolvedAt = _formatDate(data['resolved_at']);
 
@@ -128,11 +136,24 @@ class _ReportLogPageState extends State<ReportLogPage> {
                         _DetailItem('Unique Code',  code),
                         _DetailItem('Reported By',  reportedBy),
                         _DetailItem('Repaired By',  repairedBy),
+                        _DetailItem('AI Attempted Fix', aiAttemptedFix ? 'Yes' : 'No'),
                         _DetailItem('Date Reported',timestamp),
                         _DetailItem('Date Resolved',resolvedAt),
                       ]),
                       const SizedBox(height: 20),
                       _DetailSection(label: 'Issue / Comment', text: comment.isEmpty ? 'No comment provided.' : comment),
+                      const SizedBox(height: 14),
+                      _DetailSection(
+                        label: 'Final Report Text',
+                        text: finalReportText.isEmpty
+                            ? (comment.isEmpty ? 'No final report text recorded.' : comment)
+                            : finalReportText,
+                      ),
+                      const SizedBox(height: 14),
+                      _DetailSection(
+                        label: 'AI Attempt Summary',
+                        text: aiAttemptSummary.isEmpty ? 'No AI attempt summary recorded.' : aiAttemptSummary,
+                      ),
                       const SizedBox(height: 14),
                       _DetailSection(label: 'Action Taken', text: actionTaken),
                     ],
@@ -367,7 +388,7 @@ class _ReportLogPageState extends State<ReportLogPage> {
                               _HeaderCell(flex: 1, text: 'LAB'),
                               _HeaderCell(flex: 1, text: 'PC'),
                               _HeaderCell(flex: 2, text: 'CODE'),
-                              _HeaderCell(flex: 4, text: 'ISSUE'),
+                              _HeaderCell(flex: 5, text: 'FINAL REPORT / AI'),
                               _HeaderCell(flex: 2, text: 'STATUS'),
                               _HeaderCell(flex: 3, text: 'DATE REPORTED'),
                               _HeaderCell(flex: 2, text: 'ACTIONS'),
@@ -387,6 +408,8 @@ class _ReportLogPageState extends State<ReportLogPage> {
                               final pc     = (data['pc']       ?? '').toString();
                               final code   = (data['pc_code']  ?? '').toString();
                               final comment= (data['comment']  ?? '').toString();
+                              final finalReportText = (data['final_report_text'] ?? '').toString();
+                              final aiAttemptedFix = (data['ai_attempted_fix'] ?? false) == true;
                               final status = (data['status']   ?? 'unknown').toString();
                               final date   = _formatDate(data['timestamp']);
 
@@ -395,7 +418,10 @@ class _ReportLogPageState extends State<ReportLogPage> {
                                 lab:     lab,
                                 pc:      pc,
                                 code:    code,
-                                comment: comment.isEmpty ? 'No comment' : comment,
+                                comment: finalReportText.isEmpty
+                                    ? (comment.isEmpty ? 'No comment' : comment)
+                                    : finalReportText,
+                                aiAttemptedFix: aiAttemptedFix,
                                 status:  status,
                                 date:    date,
                                 onView:  () => _showDetails(context, doc.id, data),
@@ -440,13 +466,14 @@ class _ReportLogPageState extends State<ReportLogPage> {
 // ── Table Row ─────────────────────────────────────────────────────────────────
 class _TableRow extends StatefulWidget {
   final String lab, pc, code, comment, status, date;
+  final bool aiAttemptedFix;
   final VoidCallback onView;
   final VoidCallback? onResolve;
 
   const _TableRow({
     super.key,
     required this.lab, required this.pc, required this.code,
-    required this.comment, required this.status, required this.date,
+    required this.comment, required this.aiAttemptedFix, required this.status, required this.date,
     required this.onView, this.onResolve,
   });
 
@@ -481,7 +508,43 @@ class _TableRowState extends State<_TableRow> {
                 ),
               ),
             ),
-            _BodyCell(flex: 4, text: widget.comment, maxLines: 2),
+            Expanded(
+              flex: 5,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.comment,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 13, color: Color(0xFF111827), height: 1.35),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: widget.aiAttemptedFix ? const Color(0xFFEAF3DE) : const Color(0xFFF3F4F6),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: widget.aiAttemptedFix ? const Color(0xFF97C459) : const Color(0xFFD1D5DB),
+                        ),
+                      ),
+                      child: Text(
+                        'AI attempted fix: ' + (widget.aiAttemptedFix ? 'Yes' : 'No'),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: widget.aiAttemptedFix ? const Color(0xFF27500A) : const Color(0xFF4B5563),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             Expanded(
               flex: 2,
               child: Align(
