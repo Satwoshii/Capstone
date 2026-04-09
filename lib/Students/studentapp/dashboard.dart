@@ -3,10 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../studentvw_pages/report_form.dart';
+import 'report_form.dart';
 import 'login/screens/login_screen.dart';
 import 'login/services/jwt_service.dart';
-import 'report_page.dart';
 
 // ── NU Clark Brand Colors ──────────────────────────────────────────────────────
 const Color _nuDarkBlue = Color(0xFF001A52);
