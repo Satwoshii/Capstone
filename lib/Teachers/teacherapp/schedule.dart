@@ -1,10 +1,7 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:excel/excel.dart' as ex;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-
-// ── NU Clark Brand Colors ──────────────────────────────────────────────────────
-const Color _nuDarkBlue = Color(0xFF001A52);
-const Color _nuGold     = Color(0xFFFFD700);
-const Color _nuWhite    = Color(0xFFF8F9FF);
 
 class SchedulePage extends StatefulWidget {
   const SchedulePage({super.key});
@@ -13,410 +10,681 @@ class SchedulePage extends StatefulWidget {
   State<SchedulePage> createState() => _SchedulePageState();
 }
 
-class _SchedulePageState extends State<SchedulePage>
-    with SingleTickerProviderStateMixin {
-  String? selectedFileName;
+class _SchedulePageState extends State<SchedulePage> {
+  final List<String> rooms = ['706', '707', '708', '709', '710', '723'];
 
-  late AnimationController _fadeCtrl;
-  late Animation<double>    _fadeAnim;
-  late Animation<Offset>    _slideAnim;
+  final List<String> days = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+  ];
+
+  final List<String> timeSlots = [
+    '7:00 AM - 7:20 AM',
+    '7:20 AM - 7:40 AM',
+    '7:40 AM - 8:00 AM',
+    '8:00 AM - 8:20 AM',
+    '8:20 AM - 8:40 AM',
+    '8:40 AM - 9:00 AM',
+    '9:00 AM - 9:20 AM',
+    '9:20 AM - 9:40 AM',
+    '9:40 AM - 10:00 AM',
+    '10:00 AM - 10:20 AM',
+    '10:20 AM - 10:40 AM',
+    '10:40 AM - 11:00 AM',
+    '11:00 AM - 11:20 AM',
+    '11:20 AM - 11:40 AM',
+    '11:40 AM - 12:00 PM',
+    '12:00 PM - 12:20 PM',
+    '12:20 PM - 12:40 PM',
+    '12:40 PM - 1:00 PM',
+    '1:00 PM - 1:20 PM',
+    '1:20 PM - 1:40 PM',
+    '1:40 PM - 2:00 PM',
+    '2:00 PM - 2:20 PM',
+    '2:20 PM - 2:40 PM',
+    '2:40 PM - 3:00 PM',
+    '3:00 PM - 3:20 PM',
+    '3:20 PM - 3:40 PM',
+    '3:40 PM - 4:00 PM',
+    '4:00 PM - 4:20 PM',
+    '4:20 PM - 4:40 PM',
+    '4:40 PM - 5:00 PM',
+    '5:00 PM - 5:20 PM',
+    '5:20 PM - 5:40 PM',
+    '5:40 PM - 6:00 PM',
+    '6:00 PM - 6:20 PM',
+    '6:20 PM - 6:40 PM',
+    '6:40 PM - 7:00 PM',
+    '7:00 PM - 7:20 PM',
+    '7:20 PM - 7:40 PM',
+    '7:40 PM - 8:00 PM',
+    '8:00 PM - 8:20 PM',
+    '8:20 PM - 8:40 PM',
+    '8:40 PM - 9:00 PM',
+  ];
+
+  String selectedRoom = '706';
+  String? selectedFileName;
+  bool isImporting = false;
+  bool isLoading = true;
+
+  // key = "Monday_7:00 AM - 7:20 AM"
+  Map<String, Map<String, String>> scheduleMap = {};
 
   @override
   void initState() {
     super.initState();
-    _fadeCtrl = AnimationController(
-        duration: const Duration(milliseconds: 700), vsync: this);
-    _fadeAnim  = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
-    _slideAnim = Tween<Offset>(
-        begin: const Offset(0, 0.08), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut));
-    _fadeCtrl.forward();
+    loadScheduleForRoom();
   }
 
-  @override
-  void dispose() {
-    _fadeCtrl.dispose();
-    super.dispose();
+  String makeKey(String day, String timeSlot) => '${day}_$timeSlot';
+
+  DateTime? parseTimeOnly(String value) {
+    final normalized = value.trim().replaceAll(RegExp(r'\s+'), ' ');
+    final match =
+    RegExp(r'^(\d{1,2}):(\d{2})\s?(AM|PM)$', caseSensitive: false)
+        .firstMatch(normalized);
+
+    if (match == null) return null;
+
+    int hour = int.parse(match.group(1)!);
+    final minute = int.parse(match.group(2)!);
+    final period = match.group(3)!.toUpperCase();
+
+    if (period == 'AM') {
+      if (hour == 12) hour = 0;
+    } else {
+      if (hour != 12) hour += 12;
+    }
+
+    return DateTime(2000, 1, 1, hour, minute);
   }
 
-  // ── ALL ORIGINAL LOGIC — UNTOUCHED ────────────────────────────────────────
+  bool slotOverlapsClass({
+    required String cellSlot,
+    required String classStart,
+    required String classEnd,
+  }) {
+    final parts = cellSlot.split(' - ');
+    if (parts.length != 2) return false;
+
+    final cellStart = parseTimeOnly(parts[0]);
+    final cellEnd = parseTimeOnly(parts[1]);
+    final clsStart = parseTimeOnly(classStart);
+    final clsEnd = parseTimeOnly(classEnd);
+
+    if (cellStart == null ||
+        cellEnd == null ||
+        clsStart == null ||
+        clsEnd == null) {
+      return false;
+    }
+
+    return cellStart.isBefore(clsEnd) && cellEnd.isAfter(clsStart);
+  }
+
+  String normalizeTimeLabel(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return '';
+
+    final parts = trimmed.split('-');
+    if (parts.length != 2) return trimmed;
+
+    String formatPart(String value, {required bool isEnd}) {
+      final bits = value.trim().split(':');
+      if (bits.length != 2) return value.trim();
+
+      int hour = int.tryParse(bits[0]) ?? 0;
+      final minute = bits[1];
+
+      String period = 'AM';
+
+      if (hour == 12) {
+        period = 'PM';
+      } else if (hour >= 1 && hour <= 6) {
+        period = 'PM';
+      } else if (hour >= 7 && hour <= 11) {
+        period = 'AM';
+      }
+
+      return '$hour:$minute $period';
+    }
+
+    final start = formatPart(parts[0], isEnd: false);
+    final end = formatPart(parts[1], isEnd: true);
+
+    return '$start - $end';
+  }
+
+  Future<void> loadScheduleForRoom() async {
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      final query = await FirebaseFirestore.instance
+          .collection('schedules')
+          .where('room', isEqualTo: selectedRoom)
+          .get();
+
+      final Map<String, Map<String, String>> loaded = {};
+
+      for (final doc in query.docs) {
+        final data = doc.data();
+
+        final day = (data['day'] ?? '').toString().trim();
+        final startTime = (data['start_time'] ?? '').toString().trim();
+        final endTime = (data['end_time'] ?? '').toString().trim();
+        final subject = (data['subject'] ?? '').toString().trim();
+        final section = (data['section'] ?? '').toString().trim();
+
+        if (day.isEmpty || startTime.isEmpty || endTime.isEmpty) continue;
+
+        final fullClassTime = '$startTime - $endTime';
+
+        for (final slot in timeSlots) {
+          if (slotOverlapsClass(
+            cellSlot: slot,
+            classStart: startTime,
+            classEnd: endTime,
+          )) {
+            loaded[makeKey(day, slot)] = {
+              'subject': subject,
+              'section': section,
+              'class_time': fullClassTime,
+            };
+          }
+        }
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        scheduleMap = loaded;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load schedule: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
+
+  String cellText(dynamic value) {
+    if (value == null) return '';
+    return value.toString().trim();
+  }
+
+  bool isIgnorableCell(String text) {
+    final upper = text.toUpperCase();
+    return text.isEmpty ||
+        upper == 'LUNCH BREAK' ||
+        upper == 'TOTAL HOURS' ||
+        upper == 'TIME' ||
+        upper == 'MONDAY' ||
+        upper == 'TUESDAY' ||
+        upper == 'WEDNESDAY' ||
+        upper == 'THURSDAY' ||
+        upper == 'FRIDAY' ||
+        upper == 'SATURDAY';
+  }
+
   Future<void> importExcelFile() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+      setState(() {
+        isImporting = true;
+      });
+
+      final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['xlsx', 'xls'],
+        withData: true,
       );
 
-      if (result != null && result.files.isNotEmpty) {
+      if (result == null || result.files.isEmpty) {
         setState(() {
-          selectedFileName = result.files.single.name;
+          isImporting = false;
         });
-
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Imported file: ${result.files.single.name}'),
-          backgroundColor: const Color(0xFF3B6D11),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8)),
-        ));
+        return;
       }
+
+      final file = result.files.first;
+      final bytes = file.bytes;
+
+      if (bytes == null) {
+        throw Exception('No file data found.');
+      }
+
+      final excel = ex.Excel.decodeBytes(bytes);
+      final sheetName = excel.tables.keys.first;
+      final sheet = excel.tables[sheetName];
+
+      if (sheet == null) {
+        throw Exception('No sheet found in the Excel file.');
+      }
+
+      final oldDocs = await FirebaseFirestore.instance
+          .collection('schedules')
+          .where('room', isEqualTo: selectedRoom)
+          .get();
+
+      final deleteBatch = FirebaseFirestore.instance.batch();
+      for (final doc in oldDocs.docs) {
+        deleteBatch.delete(doc.reference);
+      }
+      await deleteBatch.commit();
+
+      const int firstTimeRow = 23;
+      const int lastTimeRow = 64;
+      const int firstDayCol = 2;
+      const int lastDayCol = 7;
+
+      final List<Map<String, dynamic>> parsedEntries = [];
+
+      for (int col = firstDayCol; col <= lastDayCol; col++) {
+        final day = days[col - firstDayCol];
+        int row = firstTimeRow;
+
+        while (row <= lastTimeRow) {
+          final rawTime = cellText(
+            sheet
+                .cell(
+              ex.CellIndex.indexByColumnRow(
+                columnIndex: 0,
+                rowIndex: row - 1,
+              ),
+            )
+                .value,
+          );
+
+          final currentCellText = cellText(
+            sheet
+                .cell(
+              ex.CellIndex.indexByColumnRow(
+                columnIndex: col - 1,
+                rowIndex: row - 1,
+              ),
+            )
+                .value,
+          );
+
+          if (rawTime.isEmpty || isIgnorableCell(currentCellText)) {
+            row++;
+            continue;
+          }
+
+          final subject = currentCellText;
+          String section = '';
+          int endRow = row;
+
+          if (row + 1 <= lastTimeRow) {
+            final nextCellText = cellText(
+              sheet
+                  .cell(
+                ex.CellIndex.indexByColumnRow(
+                  columnIndex: col - 1,
+                  rowIndex: row,
+                ),
+              )
+                  .value,
+            );
+
+            if (!isIgnorableCell(nextCellText)) {
+              section = nextCellText;
+              endRow = row + 1;
+            }
+          }
+
+          final startRawTime = cellText(
+            sheet
+                .cell(
+              ex.CellIndex.indexByColumnRow(
+                columnIndex: 0,
+                rowIndex: row - 1,
+              ),
+            )
+                .value,
+          );
+
+          final endRawTime = cellText(
+            sheet
+                .cell(
+              ex.CellIndex.indexByColumnRow(
+                columnIndex: 0,
+                rowIndex: endRow - 1,
+              ),
+            )
+                .value,
+          );
+
+          final normalizedStart = normalizeTimeLabel(startRawTime);
+          final normalizedEnd = normalizeTimeLabel(endRawTime);
+
+          final startLabel = normalizedStart.split(' - ').first;
+          final endLabel = normalizedEnd.split(' - ').last;
+
+          parsedEntries.add({
+            'room': selectedRoom,
+            'day': day,
+            'start_time': startLabel,
+            'end_time': endLabel,
+            'time_slot': '$startLabel - $endLabel',
+            'subject': subject,
+            'section': section,
+            'source_file': file.name,
+            'created_at': FieldValue.serverTimestamp(),
+          });
+
+          row = endRow + 1;
+        }
+      }
+
+      final saveBatch = FirebaseFirestore.instance.batch();
+
+      for (final entry in parsedEntries) {
+        final docRef =
+        FirebaseFirestore.instance.collection('schedules').doc();
+        saveBatch.set(docRef, entry);
+      }
+
+      await saveBatch.commit();
+
+      if (!mounted) return;
+
+      setState(() {
+        selectedFileName = file.name;
+      });
+
+      await loadScheduleForRoom();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            parsedEntries.isEmpty
+                ? 'File imported, but no schedule entries were detected.'
+                : 'Imported ${parsedEntries.length} schedule entries for Room $selectedRoom.',
+          ),
+        ),
+      );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Failed to import file: $e'),
-        backgroundColor: _nuDarkBlue,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8)),
-      ));
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to import file: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isImporting = false;
+        });
+      }
     }
+  }
+
+  Widget buildRoomDropdown() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: Colors.black26),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: DropdownButton<String>(
+        value: selectedRoom,
+        underline: const SizedBox(),
+        items: rooms.map((room) {
+          return DropdownMenuItem<String>(
+            value: room,
+            child: Text('Room $room'),
+          );
+        }).toList(),
+        onChanged: (value) async {
+          if (value == null) return;
+
+          setState(() {
+            selectedRoom = value;
+          });
+
+          await loadScheduleForRoom();
+        },
+      ),
+    );
+  }
+
+  Widget buildImportButton() {
+    return ElevatedButton.icon(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFFF2C300),
+        foregroundColor: Colors.black,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+      onPressed: isImporting ? null : importExcelFile,
+      icon: const Icon(Icons.upload_file),
+      label: Text(
+        isImporting ? 'Importing...' : 'Import Excel File',
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  Widget buildCell(String day, String timeSlot) {
+    final entry = scheduleMap[makeKey(day, timeSlot)];
+    final subject = entry?['subject'] ?? '';
+    final section = entry?['section'] ?? '';
+    final classTime = entry?['class_time'] ?? '';
+
+    return Container(
+      width: 160,
+      height: 60,
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: subject.isEmpty && section.isEmpty
+            ? Colors.white
+            : const Color(0xFFF8F3D6),
+        border: Border.all(color: Colors.black26),
+      ),
+      child: Center(
+        child: (subject.isEmpty && section.isEmpty)
+            ? const SizedBox()
+            : Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              subject,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            if (section.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                section,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 10),
+              ),
+            ],
+            if (classTime.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                classTime,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 9,
+                  color: Colors.black54,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget buildTimetable() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 140,
+                height: 50,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE7E9F3),
+                  border: Border.all(color: Colors.black26),
+                ),
+                child: const Text(
+                  'Time',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              ...days.map((day) {
+                return Container(
+                  width: 160,
+                  height: 50,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE7E9F3),
+                    border: Border.all(color: Colors.black26),
+                  ),
+                  child: Text(
+                    day,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                );
+              }),
+            ],
+          ),
+          ...timeSlots.map((timeSlot) {
+            return Row(
+              children: [
+                Container(
+                  width: 140,
+                  height: 60,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF4F4F4),
+                    border: Border.all(color: Colors.black26),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Text(
+                      timeSlot,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                ...days.map((day) => buildCell(day, timeSlot)),
+              ],
+            );
+          }),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F5F8),
-
-      // ── AppBar ──────────────────────────────────────────────────────────────
+      backgroundColor: const Color(0xFFF4F2F8),
       appBar: AppBar(
-        backgroundColor: _nuDarkBlue,
-        elevation: 0,
-        toolbarHeight: 64,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new,
-              color: _nuGold, size: 18),
-          onPressed: () => Navigator.pop(context),
+        backgroundColor: const Color(0xFF4E5A97),
+        title: const Text(
+          'Schedule',
+          style: TextStyle(color: Colors.white),
         ),
-        title: Row(
-          children: [
-            Container(
-              width: 36, height: 36,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white,
-                border: Border.all(color: _nuGold, width: 2),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 16,
+                runSpacing: 12,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Room:',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      buildRoomDropdown(),
+                    ],
+                  ),
+                  buildImportButton(),
+                ],
               ),
-              child: ClipOval(
-                child: Image.asset(
-                  'assets/Images/NUSchoolLogo.png',
-                  fit: BoxFit.contain,
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  selectedFileName == null
+                      ? 'No file imported yet.'
+                      : 'Imported file: $selectedFileName',
+                  style: const TextStyle(fontSize: 14),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text('SCHEDULE',
-                    style: TextStyle(
-                        color: _nuWhite, fontSize: 17,
-                        fontWeight: FontWeight.w800, letterSpacing: 2)),
-                Text('NATIONAL UNIVERSITY CLARK · FACULTY',
-                    style: TextStyle(
-                        color: _nuGold.withOpacity(0.85),
-                        fontSize: 9, fontWeight: FontWeight.w500,
-                        letterSpacing: 2)),
-              ],
-            ),
-          ],
-        ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(3),
-          child: Container(height: 3, color: _nuGold),
-        ),
-      ),
-
-      // ── Body ────────────────────────────────────────────────────────────────
-      body: FadeTransition(
-        opacity: _fadeAnim,
-        child: SlideTransition(
-          position: _slideAnim,
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(28),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 480),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-
-                    // ── Upload panel ─────────────────────────────────────
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                            color: Colors.black.withOpacity(0.07)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 14,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
+              const SizedBox(height: 20),
+              Expanded(
+                child: isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 12,
+                        offset: Offset(0, 4),
                       ),
-                      child: Column(
-                        children: [
-
-                          // Panel header
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 14),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFF9FAFB),
-                              borderRadius: BorderRadius.vertical(
-                                  top: Radius.circular(16)),
-                              border: Border(
-                                  bottom: BorderSide(
-                                      color: Color(0xFFE5E7EB))),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 8, height: 8,
-                                  decoration: const BoxDecoration(
-                                      color: _nuGold,
-                                      shape: BoxShape.circle),
-                                ),
-                                const SizedBox(width: 8),
-                                const Text('Import Schedule',
-                                    style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w700,
-                                        color: _nuDarkBlue,
-                                        letterSpacing: 0.3)),
-                              ],
-                            ),
-                          ),
-
-                          Padding(
-                            padding: const EdgeInsets.all(28),
-                            child: Column(
-                              children: [
-
-                                // Icon badge
-                                Container(
-                                  width: 72, height: 72,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: _nuDarkBlue,
-                                    border: Border.all(
-                                        color: _nuGold, width: 2.5),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: _nuGold.withOpacity(0.2),
-                                        blurRadius: 16, spreadRadius: 2,
-                                      ),
-                                    ],
-                                  ),
-                                  child: const Icon(
-                                      Icons.table_chart_outlined,
-                                      color: _nuGold, size: 32),
-                                ),
-
-                                const SizedBox(height: 18),
-
-                                const Text('Import Schedule Excel File',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w800,
-                                        color: _nuDarkBlue)),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Upload an .xlsx or .xls file containing\nyour class schedule.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.black45,
-                                      height: 1.5),
-                                ),
-
-                                const SizedBox(height: 28),
-
-                                // Upload button
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: ElevatedButton.icon(
-                                    onPressed: importExcelFile,
-                                    icon: const Icon(
-                                        Icons.upload_file_outlined,
-                                        size: 18),
-                                    label: const Text('Import Excel File'),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: _nuDarkBlue,
-                                      foregroundColor: _nuGold,
-                                      elevation: 0,
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 14),
-                                      shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                          BorderRadius.circular(10)),
-                                      textStyle: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w700,
-                                          letterSpacing: 0.5),
-                                    ),
-                                  ),
-                                ),
-
-                                const SizedBox(height: 16),
-
-                                // File status
-                                AnimatedSwitcher(
-                                  duration:
-                                  const Duration(milliseconds: 300),
-                                  child: selectedFileName == null
-                                      ? _NoFileBox(key: const ValueKey('none'))
-                                      : _FileBox(
-                                      key: const ValueKey('file'),
-                                      fileName: selectedFileName!),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                    ],
+                  ),
+                  child: Scrollbar(
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      child: buildTimetable(),
                     ),
-
-                    const SizedBox(height: 20),
-
-                    // ── Tip card ─────────────────────────────────────────
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 14),
-                      decoration: BoxDecoration(
-                        color: _nuDarkBlue.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                            color: _nuDarkBlue.withOpacity(0.12)),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: 30, height: 30,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE8EEF8),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(Icons.lightbulb_outline,
-                                size: 16, color: _nuDarkBlue),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Accepted formats',
-                                    style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w700,
-                                        color: _nuDarkBlue)),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Only .xlsx and .xls files are supported. Make sure your schedule follows the required template format before importing.',
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.black54,
-                                      height: 1.5),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-// ── No file box ───────────────────────────────────────────────────────────────
-class _NoFileBox extends StatelessWidget {
-  const _NoFileBox({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF4F5F8),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.black.withOpacity(0.08),
-            style: BorderStyle.solid),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.insert_drive_file_outlined,
-              size: 18, color: Colors.black38),
-          const SizedBox(width: 10),
-          const Text('No file selected',
-              style: TextStyle(fontSize: 13, color: Colors.black38)),
-        ],
-      ),
-    );
-  }
-}
-
-// ── File selected box ─────────────────────────────────────────────────────────
-class _FileBox extends StatelessWidget {
-  final String fileName;
-  const _FileBox({super.key, required this.fileName});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEAF3DE),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF97C459)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 32, height: 32,
-            decoration: BoxDecoration(
-              color: const Color(0xFF3B6D11).withOpacity(0.12),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: const Icon(Icons.check_circle_outline,
-                size: 18, color: Color(0xFF3B6D11)),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('File selected',
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF3B6D11),
-                        letterSpacing: 0.5)),
-                const SizedBox(height: 2),
-                Text(fileName,
-                    style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF27500A)),
-                    overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
