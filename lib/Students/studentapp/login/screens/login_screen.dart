@@ -87,208 +87,222 @@ class _LoginScreenState extends State<LoginScreen>
           Image.asset('assets/Images/NUBackdrop.png', fit: BoxFit.cover),
           Container(color: _nuDarkBlue.withOpacity(0.72)),
           CustomPaint(painter: _CornerAccentPainter()),
-          Center(
-            child: FadeTransition(
-              opacity: _fadeAnim,
-              child: SlideTransition(
-                position: _slideAnim,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 380),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 24),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.35),
-                          blurRadius: 40, offset: const Offset(0, 16),
-                        ),
-                      ],
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight - 48,
                     ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // ── Header ──────────────────────────────────────────
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.fromLTRB(28, 28, 28, 22),
-                          decoration: const BoxDecoration(
-                            color: _nuDarkBlue,
-                            borderRadius: BorderRadius.vertical(
-                                top: Radius.circular(18)),
-                            border: Border(
-                                bottom: BorderSide(color: _nuGold, width: 3)),
-                          ),
-                          child: Column(
-                            children: [
-                              Container(
-                                width: 76, height: 76,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: Colors.white,
-                                  border: Border.all(color: _nuGold, width: 2.5),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: _nuGold.withOpacity(0.3),
-                                      blurRadius: 18, spreadRadius: 2,
-                                    ),
-                                  ],
-                                ),
-                                child: ClipOval(
-                                  child: Image.asset(
-                                    'assets/Images/NUSchoolLogo.png',
-                                    fit: BoxFit.contain,
+                    child: Center(
+                      child: FadeTransition(
+                        opacity: _fadeAnim,
+                        child: SlideTransition(
+                          position: _slideAnim,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 380),
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 24),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(18),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.35),
+                                    blurRadius: 40, offset: const Offset(0, 16),
                                   ),
-                                ),
+                                ],
                               ),
-                              const SizedBox(height: 14),
-                              const Text('NATIONAL UNIVERSITY',
-                                  style: TextStyle(
-                                      color: _nuWhite, fontSize: 17,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 2)),
-                              const SizedBox(height: 3),
-                              Text('CLARK · STUDENT PORTAL',
-                                  style: TextStyle(
-                                      color: _nuGold.withOpacity(0.85),
-                                      fontSize: 10, fontWeight: FontWeight.w600,
-                                      letterSpacing: 3)),
-                            ],
-                          ),
-                        ),
-
-                        // ── Form ────────────────────────────────────────────
-                        Padding(
-                          padding: const EdgeInsets.all(28),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Center(
-                                child: Text('Sign in to your account',
-                                    style: TextStyle(
-                                        fontSize: 13, fontWeight: FontWeight.w600,
-                                        color: Colors.black54)),
-                              ),
-                              const SizedBox(height: 22),
-
-                              _FieldLabel('EMAIL'),
-                              const SizedBox(height: 6),
-                              TextField(
-                                controller: email,
-                                keyboardType: TextInputType.emailAddress,
-                                autocorrect: false,
-                                enableSuggestions: false,
-                                onSubmitted: (_) => loginUser(),
-                                style: const TextStyle(fontSize: 14),
-                                decoration: _inputDeco(
-                                  hint: 'Enter your email',
-                                  prefix: const Icon(Icons.email_outlined,
-                                      size: 18, color: _nuDarkBlue),
-                                ),
-                              ),
-
-                              const SizedBox(height: 16),
-                              _FieldLabel('PASSWORD'),
-                              const SizedBox(height: 6),
-                              TextField(
-                                controller: password,
-                                obscureText: !showPassword,
-                                enableSuggestions: false,
-                                autocorrect: false,
-                                onSubmitted: (_) => loginUser(),
-                                style: const TextStyle(fontSize: 14),
-                                decoration: _inputDeco(
-                                  hint: 'Enter your password',
-                                  prefix: const Icon(Icons.lock_outline,
-                                      size: 18, color: _nuDarkBlue),
-                                  suffix: InkWell(
-                                    borderRadius: BorderRadius.circular(20),
-                                    onTap: () => setState(
-                                            () => showPassword = !showPassword),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(10),
-                                      child: Image.asset(
-                                        showPassword
-                                            ? 'assets/Icons/eye.png'
-                                            : 'assets/Icons/hidden.png',
-                                        width: 20, height: 20,
-                                        color: Colors.black45,
-                                      ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // ── Header ──────────────────────────────────────────
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.fromLTRB(28, 28, 28, 22),
+                                    decoration: const BoxDecoration(
+                                      color: _nuDarkBlue,
+                                      borderRadius: BorderRadius.vertical(
+                                          top: Radius.circular(18)),
+                                      border: Border(
+                                          bottom: BorderSide(color: _nuGold, width: 3)),
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        Container(
+                                          width: 76, height: 76,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: Colors.white,
+                                            border: Border.all(color: _nuGold, width: 2.5),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: _nuGold.withOpacity(0.3),
+                                                blurRadius: 18, spreadRadius: 2,
+                                              ),
+                                            ],
+                                          ),
+                                          child: ClipOval(
+                                            child: Image.asset(
+                                              'assets/Images/NUSchoolLogo.png',
+                                              fit: BoxFit.contain,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 14),
+                                        const Text('NATIONAL UNIVERSITY',
+                                            style: TextStyle(
+                                                color: _nuWhite, fontSize: 17,
+                                                fontWeight: FontWeight.w800,
+                                                letterSpacing: 2)),
+                                        const SizedBox(height: 3),
+                                        Text('CLARK · STUDENT PORTAL',
+                                            style: TextStyle(
+                                                color: _nuGold.withOpacity(0.85),
+                                                fontSize: 10, fontWeight: FontWeight.w600,
+                                                letterSpacing: 3)),
+                                      ],
                                     ),
                                   ),
-                                ),
+
+                                  // ── Form ────────────────────────────────────────────
+                                  Padding(
+                                    padding: const EdgeInsets.all(28),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Center(
+                                          child: Text('Sign in to your account',
+                                              style: TextStyle(
+                                                  fontSize: 13, fontWeight: FontWeight.w600,
+                                                  color: Colors.black54)),
+                                        ),
+                                        const SizedBox(height: 22),
+
+                                        _FieldLabel('EMAIL'),
+                                        const SizedBox(height: 6),
+                                        TextField(
+                                          controller: email,
+                                          keyboardType: TextInputType.emailAddress,
+                                          autocorrect: false,
+                                          enableSuggestions: false,
+                                          onSubmitted: (_) => loginUser(),
+                                          style: const TextStyle(fontSize: 14),
+                                          decoration: _inputDeco(
+                                            hint: 'Enter your email',
+                                            prefix: const Icon(Icons.email_outlined,
+                                                size: 18, color: _nuDarkBlue),
+                                          ),
+                                        ),
+
+                                        const SizedBox(height: 16),
+                                        _FieldLabel('PASSWORD'),
+                                        const SizedBox(height: 6),
+                                        TextField(
+                                          controller: password,
+                                          obscureText: !showPassword,
+                                          enableSuggestions: false,
+                                          autocorrect: false,
+                                          onSubmitted: (_) => loginUser(),
+                                          style: const TextStyle(fontSize: 14),
+                                          decoration: _inputDeco(
+                                            hint: 'Enter your password',
+                                            prefix: const Icon(Icons.lock_outline,
+                                                size: 18, color: _nuDarkBlue),
+                                            suffix: InkWell(
+                                              borderRadius: BorderRadius.circular(20),
+                                              onTap: () => setState(
+                                                      () => showPassword = !showPassword),
+                                              child: Padding(
+                                                padding: const EdgeInsets.all(10),
+                                                child: Image.asset(
+                                                  showPassword
+                                                      ? 'assets/Icons/eye.png'
+                                                      : 'assets/Icons/hidden.png',
+                                                  width: 20, height: 20,
+                                                  color: Colors.black45,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+
+                                        const SizedBox(height: 22),
+
+                                        // Login button
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: ElevatedButton(
+                                            onPressed: loginUser,
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: _nuDarkBlue,
+                                              foregroundColor: _nuGold,
+                                              elevation: 0,
+                                              padding: const EdgeInsets.symmetric(
+                                                  vertical: 15),
+                                              shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                  BorderRadius.circular(12)),
+                                              textStyle: const TextStyle(
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.w800,
+                                                  letterSpacing: 1.5),
+                                            ),
+                                            child: Row(
+                                              mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                              children: const [
+                                                Icon(Icons.login_outlined, size: 18),
+                                                SizedBox(width: 8),
+                                                Text('LOG IN'),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+
+                                        const SizedBox(height: 12),
+
+                                        // Register button
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: OutlinedButton(
+                                            onPressed: () => Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                  builder: (_) =>
+                                                  const RegisterScreen()),
+                                            ),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: _nuDarkBlue,
+                                              side: BorderSide(
+                                                  color: Colors.black.withOpacity(0.15)),
+                                              padding: const EdgeInsets.symmetric(
+                                                  vertical: 13),
+                                              shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                  BorderRadius.circular(12)),
+                                              textStyle: const TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600),
+                                            ),
+                                            child: const Text('Create Account'),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
-
-                              const SizedBox(height: 22),
-
-                              // Login button
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton(
-                                  onPressed: loginUser,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: _nuDarkBlue,
-                                    foregroundColor: _nuGold,
-                                    elevation: 0,
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 15),
-                                    shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                        BorderRadius.circular(12)),
-                                    textStyle: const TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 1.5),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                    MainAxisAlignment.center,
-                                    children: const [
-                                      Icon(Icons.login_outlined, size: 18),
-                                      SizedBox(width: 8),
-                                      Text('LOG IN'),
-                                    ],
-                                  ),
-                                ),
-                              ),
-
-                              const SizedBox(height: 12),
-
-                              // Register button
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton(
-                                  onPressed: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (_) =>
-                                        const RegisterScreen()),
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: _nuDarkBlue,
-                                    side: BorderSide(
-                                        color: Colors.black.withOpacity(0.15)),
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 13),
-                                    shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                        BorderRadius.circular(12)),
-                                    textStyle: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600),
-                                  ),
-                                  child: const Text('Create Account'),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ),
         ],
