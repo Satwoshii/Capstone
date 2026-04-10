@@ -5,7 +5,10 @@ class TeacherAuthService {
   final users = FirebaseFirestore.instance.collection("users");
 
   Future<void> register(String email, String password) async {
-    final existingUser = await users.where("email", isEqualTo: email).get();
+    final cleanEmail = email.trim();
+
+    final existingUser =
+    await users.where("email", isEqualTo: cleanEmail).limit(1).get();
 
     if (existingUser.docs.isNotEmpty) {
       throw "An account with this email already exists.";
@@ -15,31 +18,54 @@ class TeacherAuthService {
     BCrypt.hashpw(password, BCrypt.gensalt(logRounds: 12));
 
     await users.add({
-      "email": email,
+      "email": cleanEmail,
       "password": hashedPassword,
       "role": "Teacher",
       "createdAt": FieldValue.serverTimestamp(),
     });
   }
 
-  Future<Map<String, dynamic>?> login(String email, String password) async {
-    final result = await users.where("email", isEqualTo: email).get();
+  Future<Map<String, dynamic>> login(String email, String password) async {
+    final cleanEmail = email.trim();
 
-    if (result.docs.isEmpty) return null;
+    final result =
+    await users.where("email", isEqualTo: cleanEmail).limit(1).get();
+
+    if (result.docs.isEmpty) {
+      return {
+        "success": false,
+        "message": "Account not found.",
+      };
+    }
 
     final doc = result.docs.first;
     final user = doc.data();
 
-    if (user["role"] != "Teacher") return null;
+    final role = (user["role"] ?? "").toString().trim();
+    final storedPassword = (user["password"] ?? "").toString();
 
-    if (BCrypt.checkpw(password, user["password"])) {
+    if (role.toLowerCase() != "teacher") {
       return {
-        "uid": doc.id,
-        "email": user["email"],
-        "role": user["role"],
+        "success": false,
+        "message": "Access denied. This portal is for Teacher accounts only.",
       };
     }
 
-    return null;
+    if (!BCrypt.checkpw(password, storedPassword)) {
+      return {
+        "success": false,
+        "message": "Invalid password.",
+      };
+    }
+
+    return {
+      "success": true,
+      "message": "Login successful.",
+      "user": {
+        "uid": doc.id,
+        "email": user["email"],
+        "role": role,
+      }
+    };
   }
 }

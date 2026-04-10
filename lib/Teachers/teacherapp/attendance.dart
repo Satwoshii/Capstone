@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -26,10 +27,25 @@ class _AttendancePageState extends State<AttendancePage> {
   String currentEndTime = '';
   bool hasOngoingClass = false;
 
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _scheduleSub;
+  Timer? _clockRefreshTimer;
+
   @override
   void initState() {
     super.initState();
     loadCurrentSchedule();
+    _listenToScheduleRealtime();
+
+    _clockRefreshTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
+      await loadCurrentSchedule();
+    });
+  }
+
+  @override
+  void dispose() {
+    _scheduleSub?.cancel();
+    _clockRefreshTimer?.cancel();
+    super.dispose();
   }
 
   String getCurrentDayName() {
@@ -90,6 +106,22 @@ class _AttendancePageState extends State<AttendancePage> {
     if (start == null || end == null) return null;
 
     return DateTimeRange(start: start, end: end);
+  }
+
+  void _listenToScheduleRealtime() {
+    _scheduleSub?.cancel();
+
+    final day = getCurrentDayName();
+    if (day.isEmpty) return;
+
+    _scheduleSub = FirebaseFirestore.instance
+        .collection('schedules')
+        .where('room', isEqualTo: selectedRoom)
+        .where('day', isEqualTo: day)
+        .snapshots()
+        .listen((_) async {
+      await loadCurrentSchedule();
+    });
   }
 
   Future<void> loadCurrentSchedule() async {
@@ -206,9 +238,10 @@ class _AttendancePageState extends State<AttendancePage> {
       }
 
       if (scannedAt.isBefore(lateThreshold)) {
-        grouped[email]!['present'] += 1.0;
+        grouped[email]!['present'] =
+            (grouped[email]!['present'] as double) + 1.0;
       } else {
-        grouped[email]!['late'] += 0.5;
+        grouped[email]!['late'] = (grouped[email]!['late'] as double) + 0.5;
       }
 
       final date = (data['date'] ?? '').toString().trim();
@@ -457,6 +490,7 @@ class _AttendancePageState extends State<AttendancePage> {
                       });
 
                       await loadCurrentSchedule();
+                      _listenToScheduleRealtime();
                     },
                   ),
                 ),
@@ -538,7 +572,8 @@ class _AttendancePageState extends State<AttendancePage> {
                               return DataRow(
                                 cells: [
                                   DataCell(Text(email)),
-                                  DataCell(Text(present.toString())),
+                                  DataCell(
+                                      Text(present.toString())),
                                   DataCell(Text(late.toString())),
                                   DataCell(Text(score.toString())),
                                   DataCell(
