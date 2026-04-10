@@ -15,7 +15,7 @@ import 'ITSO/services/rooms_repository_web.dart';
 // Mobile
 import 'Students/studentapp/mainapp.dart';
 
-// Web
+// Webs
 import 'Students/studentvw_pages/login/main2.dart';
 
 void main() async {
