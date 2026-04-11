@@ -32,11 +32,16 @@ class _LabMapPageState extends State<LabMapPage> {
   bool hasOngoingClass = false;
 
   Timer? refreshTimer;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _attendanceSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _pcsSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _scheduleSub;
 
   @override
   void initState() {
     super.initState();
     refreshAll();
+    _listenToRealtimeUpdates();
+
     refreshTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
       await refreshAll();
     });
@@ -45,6 +50,9 @@ class _LabMapPageState extends State<LabMapPage> {
   @override
   void dispose() {
     refreshTimer?.cancel();
+    _attendanceSub?.cancel();
+    _pcsSub?.cancel();
+    _scheduleSub?.cancel();
     super.dispose();
   }
 
@@ -52,6 +60,68 @@ class _LabMapPageState extends State<LabMapPage> {
     await loadPcsForSelectedRoom();
     await loadCurrentScheduleForRoom();
     await loadTodayAttendanceForRoom();
+  }
+
+  void _listenToRealtimeUpdates() {
+    _attendanceSub?.cancel();
+    _pcsSub?.cancel();
+    _scheduleSub?.cancel();
+
+    final today = DateTime.now().toString().split(' ')[0];
+    final currentDay = getCurrentDayName();
+
+    _attendanceSub = FirebaseFirestore.instance
+        .collection('attendance')
+        .where('lab', isEqualTo: selectedRoom)
+        .where('date', isEqualTo: today)
+        .snapshots()
+        .listen((_) async {
+      await loadTodayAttendanceForRoom();
+
+      if (!mounted) return;
+      if (selectedPc != null) {
+        final selected = docsByPc[selectedPc!.toUpperCase()];
+        setState(() {
+          selectedPcData = selected?['data'] as Map<String, dynamic>?;
+          selectedPcDocId = selected?['docId'] as String?;
+        });
+      } else {
+        setState(() {});
+      }
+    });
+
+    _pcsSub = FirebaseFirestore.instance
+        .collection('pcs')
+        .where('lab', isEqualTo: selectedRoom)
+        .snapshots()
+        .listen((_) async {
+      await loadPcsForSelectedRoom();
+
+      if (!mounted) return;
+      if (selectedPc != null) {
+        final selected = docsByPc[selectedPc!.toUpperCase()];
+        setState(() {
+          selectedPcData = selected?['data'] as Map<String, dynamic>?;
+          selectedPcDocId = selected?['docId'] as String?;
+        });
+      } else {
+        setState(() {});
+      }
+    });
+
+    if (currentDay.isNotEmpty) {
+      _scheduleSub = FirebaseFirestore.instance
+          .collection('schedules')
+          .where('room', isEqualTo: selectedRoom)
+          .where('day', isEqualTo: currentDay)
+          .snapshots()
+          .listen((_) async {
+        await loadCurrentScheduleForRoom();
+
+        if (!mounted) return;
+        setState(() {});
+      });
+    }
   }
 
   String getCurrentDayName() {
@@ -128,6 +198,27 @@ class _LabMapPageState extends State<LabMapPage> {
     }
 
     return timestamp.toString();
+  }
+
+  String normalizePcName(String raw) {
+    final value = raw.trim().toUpperCase();
+
+    if (value.isEmpty) return '';
+
+    final noSpaces = value.replaceAll(' ', '');
+
+    final match1 = RegExp(r'^PC(\d+)$').firstMatch(noSpaces);
+    if (match1 != null) {
+      return 'PC${match1.group(1)}';
+    }
+
+    final match2 =
+    RegExp(r'PC\s*(\d+)', caseSensitive: false).firstMatch(value);
+    if (match2 != null) {
+      return 'PC${match2.group(1)}';
+    }
+
+    return noSpaces;
   }
 
   Future<void> loadCurrentScheduleForRoom() async {
@@ -215,12 +306,17 @@ class _LabMapPageState extends State<LabMapPage> {
           .where('date', isEqualTo: today)
           .get();
 
-      final Map<String, List<QueryDocumentSnapshot<Map<String, dynamic>>>> mapped =
-      {};
+      final Map<String, List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+      mapped = {};
 
       for (final doc in query.docs) {
         final data = doc.data();
-        final pc = (data['pc'] ?? '').toString().trim().toUpperCase();
+
+        final rawPc =
+        (data['pc'] ?? data['pc_name'] ?? data['workstation'] ?? '')
+            .toString();
+
+        final pc = normalizePcName(rawPc);
 
         if (pc.isEmpty) continue;
 
@@ -254,7 +350,7 @@ class _LabMapPageState extends State<LabMapPage> {
         final data = doc.data();
 
         final fieldLab = (data['lab'] ?? '').toString().trim();
-        final fieldPc = (data['pc'] ?? '').toString().trim().toUpperCase();
+        final fieldPc = normalizePcName((data['pc'] ?? '').toString());
 
         final bool prefixMatch = docId.startsWith(expectedPrefix);
         final bool fieldMatch =
@@ -414,6 +510,7 @@ class _LabMapPageState extends State<LabMapPage> {
 
     Color boxColor = const Color(0xFFD9D9D9);
 
+    // ONLY green when scanned within the active uploaded class time
     if (scannedThisClass) {
       boxColor = Colors.green;
     } else if (qrCreated) {
@@ -421,7 +518,7 @@ class _LabMapPageState extends State<LabMapPage> {
     }
 
     if (isSelected) {
-      boxColor = boxColor.withValues(alpha: 0.85);
+      boxColor = boxColor.withOpacity(0.85);
     }
 
     return InkWell(
@@ -530,15 +627,29 @@ class _LabMapPageState extends State<LabMapPage> {
     final data = selectedPcData;
     final bool qrCreated = data != null;
 
+    // ONLY show attendance data from the active uploaded class time
     final latestAttendance = getLatestCurrentClassAttendance(selectedPc!);
+    final attendanceData = latestAttendance?.data();
 
-    final String studentEmail = latestAttendance == null
+    final String studentEmail = attendanceData == null
         ? 'N/A'
-        : (latestAttendance.data()['student_email'] ?? 'N/A').toString();
+        : (attendanceData['student_email'] ??
+        attendanceData['email'] ??
+        attendanceData['studentEmail'] ??
+        'N/A')
+        .toString();
 
-    final String scanTime = latestAttendance == null
+    final String scanTime = attendanceData == null
         ? 'N/A'
-        : formatTimestamp(latestAttendance.data()['timestamp']);
+        : formatTimestamp(attendanceData['timestamp']);
+
+    final String attendanceComment = attendanceData == null
+        ? 'N/A'
+        : (attendanceData['comment'] ??
+        attendanceData['remarks'] ??
+        attendanceData['issue'] ??
+        'N/A')
+        .toString();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -571,7 +682,9 @@ class _LabMapPageState extends State<LabMapPage> {
         const SizedBox(height: 8),
         Text('Time of QR Scan / Report: $scanTime'),
         const SizedBox(height: 8),
-        Text('Comment: ${data?['comment']?.toString() ?? "N/A"}'),
+        Text(
+          'Comment: ${attendanceComment != "N/A" ? attendanceComment : (data?['comment']?.toString() ?? "N/A")}',
+        ),
       ],
     );
   }
@@ -662,6 +775,7 @@ class _LabMapPageState extends State<LabMapPage> {
                         });
 
                         await refreshAll();
+                        _listenToRealtimeUpdates();
                       },
                     ),
                   ),

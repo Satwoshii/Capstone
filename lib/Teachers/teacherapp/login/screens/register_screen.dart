@@ -23,22 +23,64 @@ class _TeacherRegisterScreenState extends State<TeacherRegisterScreen>
   bool showPassword        = false;
   bool showConfirmPassword = false;
   bool isSubmitting        = false;
+
+  String? emailError;
+  String? passwordError;
   String? confirmPasswordError;
 
   late AnimationController _fadeCtrl;
-  late Animation<double>    _fadeAnim;
-  late Animation<Offset>    _slideAnim;
+  late Animation<double> _fadeAnim;
+  late Animation<Offset> _slideAnim;
 
   @override
   void initState() {
     super.initState();
+
     _fadeCtrl = AnimationController(
-        duration: const Duration(milliseconds: 800), vsync: this);
-    _fadeAnim  = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
     _slideAnim = Tween<Offset>(
-        begin: const Offset(0, 0.08), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut));
+      begin: const Offset(0, 0.08),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut));
+
     _fadeCtrl.forward();
+
+    email.addListener(() {
+      if (emailError != null) {
+        setState(() => emailError = _validateEmail(email.text));
+      } else {
+        setState(() {});
+      }
+    });
+
+    password.addListener(() {
+      if (passwordError != null) {
+        setState(() => passwordError = _validatePassword(password.text));
+      } else {
+        setState(() {});
+      }
+
+      if (confirmPassword.text.isNotEmpty) {
+        setState(() {
+          confirmPasswordError =
+              _validateConfirmPassword(confirmPassword.text);
+        });
+      }
+    });
+
+    confirmPassword.addListener(() {
+      if (confirmPasswordError != null) {
+        setState(() {
+          confirmPasswordError =
+              _validateConfirmPassword(confirmPassword.text);
+        });
+      } else {
+        setState(() {});
+      }
+    });
   }
 
   @override
@@ -50,48 +92,111 @@ class _TeacherRegisterScreenState extends State<TeacherRegisterScreen>
     super.dispose();
   }
 
-  // ── ALL ORIGINAL LOGIC — UNTOUCHED ────────────────────────────────────────
+  String? _validateEmail(String value) {
+    final v = value.trim();
+
+    if (v.isEmpty) {
+      return 'Email is required';
+    }
+
+    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    if (!emailRegex.hasMatch(v)) {
+      return 'Enter a valid email address';
+    }
+
+    return null;
+  }
+
+  String? _validatePassword(String value) {
+    final v = value.trim();
+
+    if (v.isEmpty) {
+      return 'Password is required';
+    }
+
+    if (v.length < 10) {
+      return 'Password must be at least 10 characters';
+    }
+
+    return null;
+  }
+
+  String? _validateConfirmPassword(String value) {
+    final v = value.trim();
+
+    if (v.isEmpty) {
+      return 'Please confirm your password';
+    }
+
+    if (v != password.text) {
+      return 'Passwords do not match';
+    }
+
+    return null;
+  }
+
+  bool get _isFormValid {
+    return _validateEmail(email.text) == null &&
+        _validatePassword(password.text) == null &&
+        _validateConfirmPassword(confirmPassword.text) == null;
+  }
+
   Future<void> registerUser() async {
-    if (email.text.isEmpty ||
-        password.text.isEmpty ||
-        confirmPassword.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text('Please fill in all fields'),
-        backgroundColor: _nuDarkBlue,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ));
-      return;
-    }
+    final newEmailError = _validateEmail(email.text);
+    final newPasswordError = _validatePassword(password.text);
+    final newConfirmPasswordError =
+    _validateConfirmPassword(confirmPassword.text);
 
-    if (password.text != confirmPassword.text) {
-      setState(() => confirmPasswordError = 'Passwords do not match');
-      return;
-    }
+    setState(() {
+      emailError = newEmailError;
+      passwordError = newPasswordError;
+      confirmPasswordError = newConfirmPasswordError;
+    });
 
-    setState(() { confirmPasswordError = null; isSubmitting = true; });
-
-    try {
-      await auth.register(email.text, password.text);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text('Registration Successful'),
-          backgroundColor: const Color(0xFF3B6D11),
+    if (!_isFormValid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Please correct the highlighted fields'),
+          backgroundColor: _nuDarkBlue,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8)),
-        ));
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() => isSubmitting = true);
+
+    try {
+      await auth.register(email.text.trim(), password.text);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Registration Successful'),
+            backgroundColor: const Color(0xFF3B6D11),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Error: ${e.toString()}'),
-          backgroundColor: _nuDarkBlue,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8)),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: _nuDarkBlue,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => isSubmitting = false);
@@ -104,11 +209,8 @@ class _TeacherRegisterScreenState extends State<TeacherRegisterScreen>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background image
           Image.asset('assets/Images/NUBackdrop.png', fit: BoxFit.cover),
-          // Navy overlay
           Container(color: _nuDarkBlue.withOpacity(0.72)),
-          // Corner accents
           CustomPaint(painter: _CornerAccentPainter()),
 
           Center(
@@ -120,7 +222,9 @@ class _TeacherRegisterScreenState extends State<TeacherRegisterScreen>
                   constraints: const BoxConstraints(maxWidth: 400),
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 32),
+                      horizontal: 24,
+                      vertical: 32,
+                    ),
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
@@ -136,33 +240,35 @@ class _TeacherRegisterScreenState extends State<TeacherRegisterScreen>
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-
-                          // ── Header ─────────────────────────────────────
                           Container(
                             width: double.infinity,
-                            padding:
-                            const EdgeInsets.fromLTRB(28, 28, 28, 22),
+                            padding: const EdgeInsets.fromLTRB(28, 28, 28, 22),
                             decoration: const BoxDecoration(
                               color: _nuDarkBlue,
                               borderRadius: BorderRadius.vertical(
-                                  top: Radius.circular(18)),
+                                top: Radius.circular(18),
+                              ),
                               border: Border(
-                                  bottom: BorderSide(
-                                      color: _nuGold, width: 3)),
+                                bottom: BorderSide(color: _nuGold, width: 3),
+                              ),
                             ),
                             child: Column(
                               children: [
                                 Container(
-                                  width: 72, height: 72,
+                                  width: 72,
+                                  height: 72,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     color: Colors.white,
                                     border: Border.all(
-                                        color: _nuGold, width: 2.5),
+                                      color: _nuGold,
+                                      width: 2.5,
+                                    ),
                                     boxShadow: [
                                       BoxShadow(
                                         color: _nuGold.withOpacity(0.3),
-                                        blurRadius: 18, spreadRadius: 2,
+                                        blurRadius: 18,
+                                        spreadRadius: 2,
                                       ),
                                     ],
                                   ),
@@ -174,38 +280,46 @@ class _TeacherRegisterScreenState extends State<TeacherRegisterScreen>
                                   ),
                                 ),
                                 const SizedBox(height: 14),
-                                const Text('NATIONAL UNIVERSITY',
-                                    style: TextStyle(
-                                        color: _nuWhite, fontSize: 17,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 2)),
+                                const Text(
+                                  'NATIONAL UNIVERSITY',
+                                  style: TextStyle(
+                                    color: _nuWhite,
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 2,
+                                  ),
+                                ),
                                 const SizedBox(height: 3),
-                                Text('CLARK · FACULTY PORTAL',
-                                    style: TextStyle(
-                                        color: _nuGold.withOpacity(0.85),
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: 3)),
+                                Text(
+                                  'CLARK · FACULTY PORTAL',
+                                  style: TextStyle(
+                                    color: _nuGold.withOpacity(0.85),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 3,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
 
-                          // ── Form ───────────────────────────────────────
                           Padding(
                             padding: const EdgeInsets.all(28),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Center(
-                                  child: Text('Create your faculty account',
-                                      style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.black54)),
+                                  child: Text(
+                                    'Create your faculty account',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black54,
+                                    ),
+                                  ),
                                 ),
                                 const SizedBox(height: 22),
 
-                                // Email
                                 _FieldLabel('EMAIL'),
                                 const SizedBox(height: 6),
                                 TextField(
@@ -216,14 +330,35 @@ class _TeacherRegisterScreenState extends State<TeacherRegisterScreen>
                                   style: const TextStyle(fontSize: 14),
                                   decoration: _inputDeco(
                                     hint: 'Enter your email',
-                                    prefix: const Icon(Icons.email_outlined,
-                                        size: 18, color: _nuDarkBlue),
+                                    prefix: const Icon(
+                                      Icons.email_outlined,
+                                      size: 18,
+                                      color: _nuDarkBlue,
+                                    ),
+                                  ).copyWith(
+                                    errorText: emailError,
+                                    errorStyle: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFFE24B4A),
+                                    ),
+                                    focusedErrorBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: const BorderSide(
+                                        color: Color(0xFFE24B4A),
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                    errorBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: const BorderSide(
+                                        color: Color(0xFFF09595),
+                                      ),
+                                    ),
                                   ),
                                 ),
 
                                 const SizedBox(height: 16),
 
-                                // Create Password
                                 _FieldLabel('CREATE PASSWORD'),
                                 const SizedBox(height: 6),
                                 TextField(
@@ -234,19 +369,41 @@ class _TeacherRegisterScreenState extends State<TeacherRegisterScreen>
                                   style: const TextStyle(fontSize: 14),
                                   decoration: _inputDeco(
                                     hint: 'Create a password',
-                                    prefix: const Icon(Icons.lock_outline,
-                                        size: 18, color: _nuDarkBlue),
+                                    prefix: const Icon(
+                                      Icons.lock_outline,
+                                      size: 18,
+                                      color: _nuDarkBlue,
+                                    ),
                                     suffix: _eyeToggle(
                                       show: showPassword,
                                       onTap: () => setState(
-                                              () => showPassword = !showPassword),
+                                            () => showPassword = !showPassword,
+                                      ),
+                                    ),
+                                  ).copyWith(
+                                    errorText: passwordError,
+                                    errorStyle: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFFE24B4A),
+                                    ),
+                                    focusedErrorBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: const BorderSide(
+                                        color: Color(0xFFE24B4A),
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                    errorBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: const BorderSide(
+                                        color: Color(0xFFF09595),
+                                      ),
                                     ),
                                   ),
                                 ),
 
                                 const SizedBox(height: 16),
 
-                                // Confirm Password
                                 _FieldLabel('CONFIRM PASSWORD'),
                                 const SizedBox(height: 6),
                                 TextField(
@@ -254,51 +411,49 @@ class _TeacherRegisterScreenState extends State<TeacherRegisterScreen>
                                   obscureText: !showConfirmPassword,
                                   enableSuggestions: false,
                                   autocorrect: false,
-                                  onChanged: (_) {
-                                    if (confirmPasswordError != null) {
-                                      setState(
-                                              () => confirmPasswordError = null);
-                                    }
-                                  },
                                   style: const TextStyle(fontSize: 14),
                                   decoration: _inputDeco(
                                     hint: 'Repeat your password',
-                                    prefix: const Icon(Icons.lock_outline,
-                                        size: 18, color: _nuDarkBlue),
+                                    prefix: const Icon(
+                                      Icons.lock_outline,
+                                      size: 18,
+                                      color: _nuDarkBlue,
+                                    ),
                                     suffix: _eyeToggle(
                                       show: showConfirmPassword,
-                                      onTap: () => setState(() =>
-                                      showConfirmPassword =
-                                      !showConfirmPassword),
+                                      onTap: () => setState(
+                                            () => showConfirmPassword =
+                                        !showConfirmPassword,
+                                      ),
                                     ),
                                   ).copyWith(
                                     errorText: confirmPasswordError,
                                     errorStyle: const TextStyle(
-                                        fontSize: 12,
-                                        color: Color(0xFFE24B4A)),
+                                      fontSize: 12,
+                                      color: Color(0xFFE24B4A),
+                                    ),
                                     focusedErrorBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(10),
                                       borderSide: const BorderSide(
-                                          color: Color(0xFFE24B4A),
-                                          width: 1.5),
+                                        color: Color(0xFFE24B4A),
+                                        width: 1.5,
+                                      ),
                                     ),
                                     errorBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(10),
                                       borderSide: const BorderSide(
-                                          color: Color(0xFFF09595)),
+                                        color: Color(0xFFF09595),
+                                      ),
                                     ),
                                   ),
                                 ),
 
                                 const SizedBox(height: 24),
 
-                                // Register button
                                 SizedBox(
                                   width: double.infinity,
                                   child: ElevatedButton(
-                                    onPressed: isSubmitting
-                                        ? null
-                                        : registerUser,
+                                    onPressed: isSubmitting ? null : registerUser,
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: _nuDarkBlue,
                                       foregroundColor: _nuGold,
@@ -306,28 +461,34 @@ class _TeacherRegisterScreenState extends State<TeacherRegisterScreen>
                                       Colors.black.withOpacity(0.08),
                                       elevation: 0,
                                       padding: const EdgeInsets.symmetric(
-                                          vertical: 15),
+                                        vertical: 15,
+                                      ),
                                       shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                          BorderRadius.circular(12)),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
                                       textStyle: const TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: 1.5),
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 1.5,
+                                      ),
                                     ),
                                     child: isSubmitting
                                         ? const SizedBox(
-                                      width: 20, height: 20,
+                                      width: 20,
+                                      height: 20,
                                       child: CircularProgressIndicator(
-                                          color: _nuGold,
-                                          strokeWidth: 2.5),
+                                        color: _nuGold,
+                                        strokeWidth: 2.5,
+                                      ),
                                     )
                                         : Row(
                                       mainAxisAlignment:
                                       MainAxisAlignment.center,
                                       children: const [
-                                        Icon(Icons.person_add_outlined,
-                                            size: 18),
+                                        Icon(
+                                          Icons.person_add_outlined,
+                                          size: 18,
+                                        ),
                                         SizedBox(width: 8),
                                         Text('REGISTER'),
                                       ],
@@ -337,7 +498,6 @@ class _TeacherRegisterScreenState extends State<TeacherRegisterScreen>
 
                                 const SizedBox(height: 12),
 
-                                // Back to login
                                 SizedBox(
                                   width: double.infinity,
                                   child: OutlinedButton(
@@ -345,19 +505,22 @@ class _TeacherRegisterScreenState extends State<TeacherRegisterScreen>
                                     style: OutlinedButton.styleFrom(
                                       foregroundColor: _nuDarkBlue,
                                       side: BorderSide(
-                                          color: Colors.black
-                                              .withOpacity(0.15)),
+                                        color: Colors.black.withOpacity(0.15),
+                                      ),
                                       padding: const EdgeInsets.symmetric(
-                                          vertical: 13),
+                                        vertical: 13,
+                                      ),
                                       shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                          BorderRadius.circular(12)),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
                                       textStyle: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600),
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                     child: const Text(
-                                        'Already have an account? Log In'),
+                                      'Already have an account? Log In',
+                                    ),
                                   ),
                                 ),
                               ],
@@ -405,7 +568,10 @@ class _TeacherRegisterScreenState extends State<TeacherRegisterScreen>
         isDense: true,
       );
 
-  Widget _eyeToggle({required bool show, required VoidCallback onTap}) =>
+  Widget _eyeToggle({
+    required bool show,
+    required VoidCallback onTap,
+  }) =>
       InkWell(
         borderRadius: BorderRadius.circular(20),
         onTap: onTap,
@@ -413,7 +579,8 @@ class _TeacherRegisterScreenState extends State<TeacherRegisterScreen>
           padding: const EdgeInsets.all(10),
           child: Image.asset(
             show ? 'assets/Icons/eye.png' : 'assets/Icons/hidden.png',
-            width: 20, height: 20,
+            width: 20,
+            height: 20,
             color: Colors.black45,
           ),
         ),
@@ -429,8 +596,11 @@ class _FieldLabel extends StatelessWidget {
   Widget build(BuildContext context) => Text(
     text,
     style: const TextStyle(
-        fontSize: 11, fontWeight: FontWeight.w700,
-        color: Colors.black45, letterSpacing: 0.8),
+      fontSize: 11,
+      fontWeight: FontWeight.w700,
+      color: Colors.black45,
+      letterSpacing: 0.8,
+    ),
   );
 }
 
@@ -444,19 +614,51 @@ class _CornerAccentPainter extends CustomPainter {
 
     canvas.drawLine(const Offset(24, 0), const Offset(24, 56), p);
     canvas.drawLine(const Offset(0, 24), const Offset(56, 24), p);
-    canvas.drawLine(Offset(size.width - 24, 0), Offset(size.width - 24, 56), p);
-    canvas.drawLine(Offset(size.width - 56, 24), Offset(size.width, 24), p);
-    canvas.drawLine(Offset(24, size.height), Offset(24, size.height - 56), p);
-    canvas.drawLine(Offset(0, size.height - 24), Offset(56, size.height - 24), p);
-    canvas.drawLine(Offset(size.width - 24, size.height), Offset(size.width - 24, size.height - 56), p);
-    canvas.drawLine(Offset(size.width - 56, size.height - 24), Offset(size.width, size.height - 24), p);
+    canvas.drawLine(
+      Offset(size.width - 24, 0),
+      Offset(size.width - 24, 56),
+      p,
+    );
+    canvas.drawLine(
+      Offset(size.width - 56, 24),
+      Offset(size.width, 24),
+      p,
+    );
+    canvas.drawLine(
+      Offset(24, size.height),
+      Offset(24, size.height - 56),
+      p,
+    );
+    canvas.drawLine(
+      Offset(0, size.height - 24),
+      Offset(56, size.height - 24),
+      p,
+    );
+    canvas.drawLine(
+      Offset(size.width - 24, size.height),
+      Offset(size.width - 24, size.height - 56),
+      p,
+    );
+    canvas.drawLine(
+      Offset(size.width - 56, size.height - 24),
+      Offset(size.width, size.height - 24),
+      p,
+    );
 
     final sp = Paint()
       ..color = const Color(0xFFFFD700).withOpacity(0.05)
       ..strokeWidth = 36
       ..style = PaintingStyle.stroke;
-    canvas.drawLine(Offset(-40, size.height * 0.3), Offset(size.width * 0.25, size.height * 0.75), sp);
-    canvas.drawLine(Offset(size.width + 40, size.height * 0.25), Offset(size.width * 0.75, size.height * 0.7), sp);
+    canvas.drawLine(
+      Offset(-40, size.height * 0.3),
+      Offset(size.width * 0.25, size.height * 0.75),
+      sp,
+    );
+    canvas.drawLine(
+      Offset(size.width + 40, size.height * 0.25),
+      Offset(size.width * 0.75, size.height * 0.7),
+      sp,
+    );
   }
 
   @override

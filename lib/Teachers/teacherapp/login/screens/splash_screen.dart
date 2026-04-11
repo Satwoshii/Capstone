@@ -22,7 +22,6 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
-
   late AnimationController _controller;
   late Animation<double> _fadeAnim;
   late Animation<double> _scaleAnim;
@@ -64,26 +63,38 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> checkLoginStatus() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? token = prefs.getString("token");
+    final prefs = await SharedPreferences.getInstance();
 
-    // Wait for splash animation/delay
+    // FIXED: use teacher_token
+    final token = prefs.getString("teacher_token");
+
     await Future.delayed(const Duration(seconds: 2));
 
     if (!mounted) return;
 
     if (token != null) {
       try {
-        var payload = JWTService.verifyToken(token);
+        final payload = JWTService.verifyToken(token);
+
         if (payload != null) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const TeacherDashboard()),
-          );
-          return;
+          final role = (payload["role"] ?? "").toString().trim();
+
+          // only Teacher can enter teacher dashboard
+          if (role.toLowerCase() == "teacher") {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const TeacherDashboard()),
+            );
+            return;
+          } else {
+            await prefs.remove("teacher_token");
+          }
+        } else {
+          await prefs.remove("teacher_token");
         }
       } catch (e) {
         debugPrint("Token verification failed: $e");
+        await prefs.remove("teacher_token");
       }
     }
 
@@ -240,10 +251,10 @@ class _SplashScreenState extends State<SplashScreen>
             colors: [Color(0xFFE6B800), _nuLightGold, _nuGold],
           ).createShader(bounds),
           child: Text(
-            'C L A R K',
+            'CLARK',
             style: TextStyle(
-              fontSize: 16 * scale,
-              fontWeight: FontWeight.w300,
+              fontSize: 32 * scale,
+              fontWeight: FontWeight.w900,
               color: Colors.white,
               letterSpacing: 8,
             ),
@@ -254,68 +265,41 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Widget _buildDivider() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(
-          width: 56 * scale,
-          height: 1,
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(colors: [Colors.transparent, _nuGold]),
-          ),
+    return Container(
+      width: 140 * scale,
+      height: 2,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.transparent,
+            _nuGold.withOpacity(0.4),
+            _nuGold,
+            _nuGold.withOpacity(0.4),
+            Colors.transparent,
+          ],
         ),
-        SizedBox(width: 6 * scale),
-        Container(
-          width: 5 * scale,
-          height: 5 * scale,
-          decoration: const BoxDecoration(color: _nuGold, shape: BoxShape.circle),
-        ),
-        SizedBox(width: 6 * scale),
-        Container(width: 22 * scale, height: 1.5, color: _nuGold),
-        SizedBox(width: 6 * scale),
-        Container(
-          width: 8 * scale,
-          height: 8 * scale,
-          decoration: BoxDecoration(
-            border: Border.all(color: _nuGold, width: 1.5),
-          ),
-          transform: Matrix4.rotationZ(0.785),
-        ),
-        SizedBox(width: 6 * scale),
-        Container(width: 22 * scale, height: 1.5, color: _nuGold),
-        SizedBox(width: 6 * scale),
-        Container(
-          width: 5 * scale,
-          height: 5 * scale,
-          decoration: const BoxDecoration(color: _nuGold, shape: BoxShape.circle),
-        ),
-        SizedBox(width: 6 * scale),
-        Container(
-          width: 56 * scale,
-          height: 1,
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(colors: [_nuGold, Colors.transparent]),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
   Widget _buildSystemBadge() {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 20 * scale, vertical: 9 * scale),
+      padding: EdgeInsets.symmetric(
+        horizontal: 18 * scale,
+        vertical: 8 * scale,
+      ),
       decoration: BoxDecoration(
-        border: Border.all(color: _nuGold.withOpacity(0.4)),
-        borderRadius: BorderRadius.circular(3),
-        color: _nuGold.withOpacity(0.07),
+        color: Colors.white.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: _nuGold.withOpacity(0.25)),
       ),
       child: Text(
-        'IT SERVICE OFFICE SYSTEM',
+        'FACULTY PORTAL',
         style: TextStyle(
+          color: _nuGold,
           fontSize: 11 * scale,
           fontWeight: FontWeight.w700,
-          color: _nuGold,
-          letterSpacing: 3,
+          letterSpacing: 2.2,
         ),
       ),
     );
@@ -325,19 +309,21 @@ class _SplashScreenState extends State<SplashScreen>
     return Column(
       children: [
         SizedBox(
-          width: 140 * scale,
-          child: LinearProgressIndicator(
-            backgroundColor: _nuWhite.withOpacity(0.1),
-            valueColor: const AlwaysStoppedAnimation<Color>(_nuGold),
+          width: 26 * scale,
+          height: 26 * scale,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.5,
+            valueColor: AlwaysStoppedAnimation<Color>(_nuGold),
+            backgroundColor: Colors.white.withOpacity(0.12),
           ),
         ),
-        SizedBox(height: 10 * scale),
+        SizedBox(height: 14 * scale),
         Text(
-          'L O A D I N G',
+          'Loading secure access...',
           style: TextStyle(
-            fontSize: 9 * scale,
-            color: _nuWhite.withOpacity(0.3),
-            letterSpacing: 4,
+            color: _nuWhite.withOpacity(0.65),
+            fontSize: 11.5 * scale,
+            letterSpacing: 1.1,
           ),
         ),
       ],
@@ -347,23 +333,30 @@ class _SplashScreenState extends State<SplashScreen>
 
 class _CornerPainter extends CustomPainter {
   final bool isLeft;
-  const _CornerPainter({required this.isLeft});
+  _CornerPainter({required this.isLeft});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFFFFD700).withOpacity(0.25)
-      ..strokeWidth = 1.0
+    final p = Paint()
+      ..color = _nuGold.withOpacity(0.7)
+      ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
 
+    final path = Path();
+
     if (isLeft) {
-      canvas.drawLine(Offset(0, size.height), const Offset(0, 0), paint);
-      canvas.drawLine(const Offset(0, 0), Offset(size.width, 0), paint);
+      path
+        ..moveTo(0, size.height * 0.45)
+        ..lineTo(0, 0)
+        ..lineTo(size.width * 0.45, 0);
     } else {
-      canvas.drawLine(
-          Offset(size.width, size.height), Offset(size.width, 0), paint);
-      canvas.drawLine(Offset(size.width, 0), const Offset(0, 0), paint);
+      path
+        ..moveTo(size.width * 0.55, 0)
+        ..lineTo(size.width, 0)
+        ..lineTo(size.width, size.height * 0.45);
     }
+
+    canvas.drawPath(path, p);
   }
 
   @override

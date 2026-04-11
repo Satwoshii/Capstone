@@ -54,39 +54,56 @@ class _TeacherLoginScreenState extends State<TeacherLoginScreen>
   // ── ALL ORIGINAL LOGIC — UNTOUCHED ────────────────────────────────────────
   Future<void> loginUser() async {
     setState(() => _busy = true);
+
     try {
-      final user = await auth.login(
+      final result = await auth.login(
         emailController.text.trim(),
         passwordController.text.trim(),
       );
 
-      if (user != null) {
+      final success = result["success"] == true;
+
+      if (success) {
+        final user = result["user"] as Map<String, dynamic>;
         final token = JWTService.generateToken(user);
+
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString("teacher_token", token);
 
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const TeacherDashboard()),
-          );
-        }
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const TeacherDashboard()),
+        );
       } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: const Text('Invalid teacher credentials'),
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result["message"] ?? "Login failed."),
             backgroundColor: _nuDarkBlue,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8)),
-          ));
-        }
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
       }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Login error: $e"),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(

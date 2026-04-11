@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'attendance.dart';
 import 'lab_map.dart';
 import 'report_form.dart';
 import 'schedule.dart';
+import 'login/screens/login_screen.dart';
 
 // ── NU Clark Brand Colors ──────────────────────────────────────────────────────
 const Color _nuDarkBlue = Color(0xFF001A52);
@@ -20,9 +23,24 @@ class TeacherDashboard extends StatefulWidget {
 class _TeacherDashboardState extends State<TeacherDashboard> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // ── ORIGINAL LOGIC — UNTOUCHED ─────────────────────────────────────────────
-  void _signOut(BuildContext context) {
-    Navigator.popUntil(context, (route) => route.isFirst);
+  // ── FIXED LOGOUT ────────────────────────────────────────────────────────────
+  Future<void> _signOut(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // remove saved teacher login token
+    await prefs.remove("teacher_token");
+
+    if (!mounted) return;
+
+    // close drawer if open
+    Navigator.of(context).popUntil((route) => route.isFirst);
+
+    // go to login and remove old pages from stack
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const TeacherLoginScreen()),
+          (route) => false,
+    );
   }
 
   @override
@@ -32,12 +50,9 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
       backgroundColor: const Color(0xFFF4F5F8),
       drawer: _TeacherDrawer(onLogout: () => _signOut(context)),
 
-      // ── Custom top bar (no AppBar — matches original pattern) ────────────
       body: SafeArea(
         child: Column(
           children: [
-
-            // ── Top bar ────────────────────────────────────────────────────
             Container(
               height: 64,
               color: _nuDarkBlue,
@@ -56,9 +71,9 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                               _scaffoldKey.currentState?.openDrawer(),
                         ),
                         const SizedBox(width: 12),
-                        // Logo circle
                         Container(
-                          width: 36, height: 36,
+                          width: 36,
+                          height: 36,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: Colors.white,
@@ -76,17 +91,24 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Text('TEACHER VIEW',
-                                style: TextStyle(
-                                    color: _nuWhite, fontSize: 15,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 2)),
-                            Text('NATIONAL UNIVERSITY CLARK · FACULTY',
-                                style: TextStyle(
-                                    color: _nuGold.withOpacity(0.85),
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w500,
-                                    letterSpacing: 2)),
+                            const Text(
+                              'TEACHER VIEW',
+                              style: TextStyle(
+                                color: _nuWhite,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 2,
+                              ),
+                            ),
+                            Text(
+                              'NATIONAL UNIVERSITY CLARK · FACULTY',
+                              style: TextStyle(
+                                color: _nuGold.withOpacity(0.85),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 2,
+                              ),
+                            ),
                           ],
                         ),
                         const Spacer(),
@@ -98,23 +120,17 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
               ),
             ),
 
-            // ── Body ──────────────────────────────────────────────────────
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(28),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-
-                    // Welcome banner
                     _WelcomeBanner(),
                     const SizedBox(height: 24),
-
-                    // Stat cards
                     _StatsGrid(),
                     const SizedBox(height: 20),
 
-                    // Status alert
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(
@@ -133,9 +149,10 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                             child: Text(
                               'No active class conflicts right now.',
                               style: TextStyle(
-                                  color: Color(0xFF27500A),
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13),
+                                color: Color(0xFF27500A),
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
                             ),
                           ),
                         ],
@@ -143,7 +160,6 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Action cards
                     _ActionsGrid(context: context),
                   ],
                 ),
@@ -165,14 +181,16 @@ class _WelcomeBanner extends StatefulWidget {
 class _WelcomeBannerState extends State<_WelcomeBanner>
     with SingleTickerProviderStateMixin {
   late AnimationController _pulseCtrl;
-  late Animation<double>    _pulseAnim;
+  late Animation<double> _pulseAnim;
 
   @override
   void initState() {
     super.initState();
     _pulseCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1200))
-      ..repeat(reverse: true);
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+
     _pulseAnim = Tween<double>(begin: 0.4, end: 1.0).animate(_pulseCtrl);
   }
 
@@ -189,7 +207,8 @@ class _WelcomeBannerState extends State<_WelcomeBanner>
       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-            colors: [Color(0xFF003087), Color(0xFF001A52)]),
+          colors: [Color(0xFF003087), Color(0xFF001A52)],
+        ),
         borderRadius: const BorderRadius.only(
           topRight: Radius.circular(10),
           bottomRight: Radius.circular(10),
@@ -202,19 +221,26 @@ class _WelcomeBannerState extends State<_WelcomeBanner>
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Faculty Dashboard',
-                  style: TextStyle(
-                      color: _nuWhite, fontSize: 19,
-                      fontWeight: FontWeight.w800)),
+              const Text(
+                'Faculty Dashboard',
+                style: TextStyle(
+                  color: _nuWhite,
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
               const SizedBox(height: 3),
-              Text('NATIONAL UNIVERSITY CLARK · ITSO SYSTEM',
-                  style: TextStyle(
-                      color: _nuGold.withOpacity(0.8),
-                      fontSize: 10, letterSpacing: 2,
-                      fontWeight: FontWeight.w500)),
+              Text(
+                'NATIONAL UNIVERSITY CLARK · ITSO SYSTEM',
+                style: TextStyle(
+                  color: _nuGold.withOpacity(0.8),
+                  fontSize: 10,
+                  letterSpacing: 2,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ],
           ),
-          // Live badge
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
@@ -227,17 +253,24 @@ class _WelcomeBannerState extends State<_WelcomeBanner>
                 FadeTransition(
                   opacity: _pulseAnim,
                   child: Container(
-                    width: 8, height: 8,
+                    width: 8,
+                    height: 8,
                     decoration: const BoxDecoration(
-                        color: Color(0xFF22C55E),
-                        shape: BoxShape.circle),
+                      color: Color(0xFF22C55E),
+                      shape: BoxShape.circle,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 6),
-                const Text('LIVE',
-                    style: TextStyle(
-                        color: _nuGold, fontSize: 11,
-                        fontWeight: FontWeight.w700, letterSpacing: 1)),
+                const Text(
+                  'LIVE',
+                  style: TextStyle(
+                    color: _nuGold,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1,
+                  ),
+                ),
               ],
             ),
           ),
@@ -253,33 +286,45 @@ class _StatsGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: _StatCard(
-          label: "Today's Classes", value: '3',
-          icon: Icons.calendar_today_outlined,
-          accentColor: const Color(0xFF185FA5),
-          iconBg: const Color(0xFFE6F1FB),
-        )),
+        Expanded(
+          child: _StatCard(
+            label: "Today's Classes",
+            value: '3',
+            icon: Icons.calendar_today_outlined,
+            accentColor: const Color(0xFF185FA5),
+            iconBg: const Color(0xFFE6F1FB),
+          ),
+        ),
         const SizedBox(width: 16),
-        Expanded(child: _StatCard(
-          label: 'Lab Rooms', value: '6',
-          icon: Icons.meeting_room_outlined,
-          accentColor: _nuDarkBlue,
-          iconBg: const Color(0xFFE8EEF8),
-        )),
+        Expanded(
+          child: _StatCard(
+            label: 'Lab Rooms',
+            value: '6',
+            icon: Icons.meeting_room_outlined,
+            accentColor: _nuDarkBlue,
+            iconBg: const Color(0xFFE8EEF8),
+          ),
+        ),
         const SizedBox(width: 16),
-        Expanded(child: _StatCard(
-          label: 'Attendance', value: '40',
-          icon: Icons.people_outline,
-          accentColor: const Color(0xFF3B6D11),
-          iconBg: const Color(0xFFEAF3DE),
-        )),
+        Expanded(
+          child: _StatCard(
+            label: 'Attendance',
+            value: '40',
+            icon: Icons.people_outline,
+            accentColor: const Color(0xFF3B6D11),
+            iconBg: const Color(0xFFEAF3DE),
+          ),
+        ),
         const SizedBox(width: 16),
-        Expanded(child: _StatCard(
-          label: 'Schedules', value: '0',
-          icon: Icons.event_note_outlined,
-          accentColor: const Color(0xFF854F0B),
-          iconBg: const Color(0xFFFAEEDA),
-        )),
+        Expanded(
+          child: _StatCard(
+            label: 'Schedules',
+            value: '0',
+            icon: Icons.event_note_outlined,
+            accentColor: const Color(0xFF854F0B),
+            iconBg: const Color(0xFFFAEEDA),
+          ),
+        ),
       ],
     );
   }
@@ -291,8 +336,11 @@ class _StatCard extends StatelessWidget {
   final Color accentColor, iconBg;
 
   const _StatCard({
-    required this.label, required this.value, required this.icon,
-    required this.accentColor, required this.iconBg,
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.accentColor,
+    required this.iconBg,
   });
 
   @override
@@ -305,36 +353,52 @@ class _StatCard extends StatelessWidget {
         border: Border.all(color: Colors.black.withOpacity(0.07)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 6, offset: const Offset(0, 2)),
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: double.infinity, height: 3,
+            width: double.infinity,
+            height: 3,
             decoration: BoxDecoration(
-                color: accentColor,
-                borderRadius: BorderRadius.circular(2)),
+              color: accentColor,
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
           const SizedBox(height: 14),
           Container(
-            width: 42, height: 42,
+            width: 42,
+            height: 42,
             decoration: BoxDecoration(
-                color: iconBg, borderRadius: BorderRadius.circular(8)),
+              color: iconBg,
+              borderRadius: BorderRadius.circular(8),
+            ),
             child: Icon(icon, size: 20, color: accentColor),
           ),
           const SizedBox(height: 12),
-          Text(label,
-              style: const TextStyle(
-                  fontSize: 12, color: Colors.black54,
-                  fontWeight: FontWeight.w500)),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.black54,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
           const SizedBox(height: 4),
-          Text(value,
-              style: TextStyle(
-                  fontSize: 32, fontWeight: FontWeight.w800,
-                  color: accentColor, height: 1)),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.w800,
+              color: accentColor,
+              height: 1,
+            ),
+          ),
         ],
       ),
     );
@@ -350,29 +414,41 @@ class _ActionsGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: _ActionCard(
-          label: 'Schedule',
-          subtitle: 'View your class timetable',
-          icon: Icons.calendar_month_outlined,
-          onTap: () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const SchedulePage())),
-        )),
+        Expanded(
+          child: _ActionCard(
+            label: 'Schedule',
+            subtitle: 'View your class timetable',
+            icon: Icons.calendar_month_outlined,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SchedulePage()),
+            ),
+          ),
+        ),
         const SizedBox(width: 16),
-        Expanded(child: _ActionCard(
-          label: 'Lab Map',
-          subtitle: 'Browse available lab rooms',
-          icon: Icons.map_outlined,
-          onTap: () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const LabMapPage())),
-        )),
+        Expanded(
+          child: _ActionCard(
+            label: 'Lab Map',
+            subtitle: 'Browse available lab rooms',
+            icon: Icons.map_outlined,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const LabMapPage()),
+            ),
+          ),
+        ),
         const SizedBox(width: 16),
-        Expanded(child: _ActionCard(
-          label: 'Attendance',
-          subtitle: 'Track student attendance',
-          icon: Icons.people_outline,
-          onTap: () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const AttendancePage())),
-        )),
+        Expanded(
+          child: _ActionCard(
+            label: 'Attendance',
+            subtitle: 'Track student attendance',
+            icon: Icons.people_outline,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AttendancePage()),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -384,8 +460,10 @@ class _ActionCard extends StatefulWidget {
   final VoidCallback onTap;
 
   const _ActionCard({
-    required this.label, required this.subtitle,
-    required this.icon, required this.onTap,
+    required this.label,
+    required this.subtitle,
+    required this.icon,
+    required this.onTap,
   });
 
   @override
@@ -399,7 +477,7 @@ class _ActionCardState extends State<_ActionCard> {
   Widget build(BuildContext context) {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
-      onExit:  (_) => setState(() => _hovered = false),
+      onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
@@ -424,33 +502,47 @@ class _ActionCardState extends State<_ActionCard> {
             children: [
               AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
-                width: 50, height: 50,
+                width: 50,
+                height: 50,
                 decoration: BoxDecoration(
                   color: _hovered ? _nuDarkBlue : const Color(0xFFE8EEF8),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(widget.icon, size: 24,
-                    color: _hovered ? _nuGold : _nuDarkBlue),
+                child: Icon(
+                  widget.icon,
+                  size: 24,
+                  color: _hovered ? _nuGold : _nuDarkBlue,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(widget.label,
-                        style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w700,
-                            color: Color(0xFF111827))),
+                    Text(
+                      widget.label,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF111827),
+                      ),
+                    ),
                     const SizedBox(height: 3),
-                    Text(widget.subtitle,
-                        style: const TextStyle(
-                            fontSize: 11, color: Colors.black45)),
+                    Text(
+                      widget.subtitle,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.black45,
+                      ),
+                    ),
                   ],
                 ),
               ),
-              Icon(Icons.arrow_forward_ios,
-                  size: 14,
-                  color: _hovered ? _nuDarkBlue : Colors.black26),
+              Icon(
+                Icons.arrow_forward_ios,
+                size: 14,
+                color: _hovered ? _nuDarkBlue : Colors.black26,
+              ),
             ],
           ),
         ),
@@ -477,7 +569,6 @@ class _TeacherDrawer extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Header
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(20, 52, 20, 24),
@@ -488,13 +579,15 @@ class _TeacherDrawer extends StatelessWidget {
                 colors: [Color(0xFF003087), Color(0xFF001A52)],
               ),
               borderRadius: BorderRadius.only(
-                  topRight: Radius.circular(18)),
+                topRight: Radius.circular(18),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  width: 60, height: 60,
+                  width: 60,
+                  height: 60,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Colors.white,
@@ -508,29 +601,44 @@ class _TeacherDrawer extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 14),
-                const Text('National University',
-                    style: TextStyle(
-                        color: _nuWhite, fontSize: 16,
-                        fontWeight: FontWeight.w800)),
-                Text('Clark',
-                    style: TextStyle(
-                        color: _nuGold.withOpacity(0.85),
-                        fontSize: 13, fontWeight: FontWeight.w500)),
+                const Text(
+                  'National University',
+                  style: TextStyle(
+                    color: _nuWhite,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  'Clark',
+                  style: TextStyle(
+                    color: _nuGold.withOpacity(0.85),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
                 const SizedBox(height: 10),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: _nuGold.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                        color: _nuGold.withOpacity(0.3)),
+                      color: _nuGold.withOpacity(0.3),
+                    ),
                   ),
-                  child: const Text('Faculty',
-                      style: TextStyle(
-                          color: _nuGold, fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1)),
+                  child: const Text(
+                    'Faculty',
+                    style: TextStyle(
+                      color: _nuGold,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -539,14 +647,15 @@ class _TeacherDrawer extends StatelessWidget {
           Container(height: 3, color: _nuGold),
           const SizedBox(height: 10),
 
-          // Menu items
           _DrawerItem(
             icon: Icons.calendar_month_outlined,
             label: 'Schedule',
             onTap: () {
               Navigator.pop(context);
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const SchedulePage()));
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SchedulePage()),
+              );
             },
           ),
           _DrawerItem(
@@ -554,8 +663,10 @@ class _TeacherDrawer extends StatelessWidget {
             label: 'Lab Map',
             onTap: () {
               Navigator.pop(context);
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const LabMapPage()));
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const LabMapPage()),
+              );
             },
           ),
           _DrawerItem(
@@ -563,8 +674,10 @@ class _TeacherDrawer extends StatelessWidget {
             label: 'Attendance',
             onTap: () {
               Navigator.pop(context);
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const AttendancePage()));
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AttendancePage()),
+              );
             },
           ),
           _DrawerItem(
@@ -572,16 +685,18 @@ class _TeacherDrawer extends StatelessWidget {
             label: 'Report to ITSO',
             onTap: () {
               Navigator.pop(context);
-              Navigator.push(context,
-                  MaterialPageRoute(
-                      builder: (_) => const TeacherReportFormPage()));
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const TeacherReportFormPage(),
+                ),
+              );
             },
           ),
 
           const Spacer(),
           const Divider(height: 1),
 
-          // Logout
           _DrawerItem(
             icon: Icons.logout,
             label: 'Logout',
@@ -602,18 +717,22 @@ class _DrawerItem extends StatelessWidget {
   final bool isDestructive;
 
   const _DrawerItem({
-    required this.icon, required this.label,
-    required this.onTap, this.isDestructive = false,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.isDestructive = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final color = isDestructive ? const Color(0xFFE24B4A) : _nuDarkBlue;
+
     return ListTile(
       contentPadding:
       const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
       leading: Container(
-        width: 36, height: 36,
+        width: 36,
+        height: 36,
         decoration: BoxDecoration(
           color: isDestructive
               ? const Color(0xFFFCEBEB)
@@ -622,10 +741,14 @@ class _DrawerItem extends StatelessWidget {
         ),
         child: Icon(icon, size: 18, color: color),
       ),
-      title: Text(label,
-          style: TextStyle(
-              fontSize: 14, fontWeight: FontWeight.w600,
-              color: color)),
+      title: Text(
+        label,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
       onTap: onTap,
     );
   }
