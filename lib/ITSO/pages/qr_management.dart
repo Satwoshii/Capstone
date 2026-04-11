@@ -522,12 +522,6 @@ class _QrManagementPageState extends State<QrManagementPage> {
                             ],
                           ),
                           const SizedBox(height: 8),
-                          _NavyBtn(
-                            label: _saving ? 'Saving…' : 'Save QR',
-                            onTap: _saving ? null : _saveSingleQr,
-                            icon: Icons.save_outlined,
-                          ),
-                          const SizedBox(height: 6),
                           _DangerBtn(
                             label: 'Delete All in Room',
                             onTap: _selectedLab == null ? null : _deleteAllInRoom,
@@ -652,14 +646,24 @@ class _QrManagementPageState extends State<QrManagementPage> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Print button
-                    Center(
-                      child: _NavyBtn(
-                        label: 'Print QR',
-                        onTap: _printSingleQr,
-                        icon: Icons.print_outlined,
-                        fullWidth: false,
-                      ),
+                    // Buttons
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _NavyBtn(
+                          label: _saving ? 'Saving…' : 'Save QR',
+                          onTap: _saving ? null : _saveSingleQr,
+                          icon: Icons.save_outlined,
+                          fullWidth: false,
+                        ),
+                        const SizedBox(width: 12),
+                        _NavyBtn(
+                          label: 'Print QR',
+                          onTap: _printSingleQr,
+                          icon: Icons.print_outlined,
+                          fullWidth: false,
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                   ],
