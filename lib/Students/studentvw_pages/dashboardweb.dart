@@ -227,130 +227,148 @@ class _DashboardPageState extends State<DashboardPage>
         child: SlideTransition(
           position: _slideAnim,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 900),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
 
-                // ── Welcome card ───────────────────────────────────────────
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                        colors: [Color(0xFF003087), Color(0xFF001A52)]),
-                    borderRadius: const BorderRadius.only(
-                      topRight: Radius.circular(14),
-                      bottomRight: Radius.circular(14),
+                    // ── Welcome card ───────────────────────────
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                            colors: [Color(0xFF003087), Color(0xFF001A52)]),
+                        borderRadius: const BorderRadius.only(
+                          topRight: Radius.circular(14),
+                          bottomRight: Radius.circular(14),
+                        ),
+                        border: const Border(
+                            left: BorderSide(color: _nuGold, width: 5)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 56, height: 56,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _nuGold.withOpacity(0.15),
+                              border: Border.all(color: _nuGold, width: 2),
+                            ),
+                            child: Center(
+                              child: Text(initials,
+                                  style: const TextStyle(
+                                      color: _nuGold, fontSize: 18,
+                                      fontWeight: FontWeight.w900, letterSpacing: 1)),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Welcome back,',
+                                    style: TextStyle(
+                                        color: _nuGold.withOpacity(0.75),
+                                        fontSize: 12, letterSpacing: 1)),
+                                const SizedBox(height: 2),
+                                Text(userName,
+                                    style: const TextStyle(
+                                        color: _nuWhite, fontSize: 20,
+                                        fontWeight: FontWeight.w800),
+                                    overflow: TextOverflow.ellipsis),
+                                Text(userEmail,
+                                    style: TextStyle(
+                                        color: _nuWhite.withOpacity(0.55),
+                                        fontSize: 12),
+                                    overflow: TextOverflow.ellipsis),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    border: const Border(
-                        left: BorderSide(color: _nuGold, width: 5)),
-                  ),
-                  child: Row(
-                    children: [
-                      // Avatar with initials
-                      Container(
-                        width: 56, height: 56,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _nuGold.withOpacity(0.15),
-                          border: Border.all(color: _nuGold, width: 2),
+
+                    const SizedBox(height: 24),
+
+                    // ── Main Content Grid-like Row ─────────────────────────────
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Left: Quick Actions
+                        Expanded(
+                          flex: 3,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('QUICK ACTIONS',
+                                  style: TextStyle(
+                                      fontSize: 11, fontWeight: FontWeight.w700,
+                                      color: Colors.black45, letterSpacing: 1.5)),
+                              const SizedBox(height: 12),
+                              _ActionCard(
+                                icon: Icons.qr_code_scanner,
+                                title: 'Enter QR Code',
+                                subtitle: 'Enter a unique code manually to submit a report',
+                                onTap: () => Navigator.push(context,
+                                    MaterialPageRoute(builder: (_) => const EnterCodePage())),
+                              ),
+                            ],
+                          ),
                         ),
-                        child: Center(
-                          child: Text(initials,
-                              style: const TextStyle(
-                                  color: _nuGold, fontSize: 18,
-                                  fontWeight: FontWeight.w900, letterSpacing: 1)),
+                        const SizedBox(width: 24),
+                        // Right: Account Info
+                        Expanded(
+                          flex: 4,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('YOUR ACCOUNT',
+                                  style: TextStyle(
+                                      fontSize: 11, fontWeight: FontWeight.w700,
+                                      color: Colors.black45, letterSpacing: 1.5)),
+                              const SizedBox(height: 12),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.black.withOpacity(0.07)),
+                                ),
+                                child: Column(
+                                  children: [
+                                    _InfoRow(
+                                      icon: Icons.person_outline,
+                                      label: 'Full Name',
+                                      value: userName,
+                                    ),
+                                    const Divider(height: 1, indent: 56),
+                                    _InfoRow(
+                                      icon: Icons.email_outlined,
+                                      label: 'Email Address',
+                                      value: userEmail,
+                                    ),
+                                    const Divider(height: 1, indent: 56),
+                                    _InfoRow(
+                                      icon: Icons.school_outlined,
+                                      label: 'Role',
+                                      value: 'Student',
+                                      valueColor: const Color(0xFF27500A),
+                                      valueBg: const Color(0xFFEAF3DE),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Welcome back,',
-                                style: TextStyle(
-                                    color: _nuGold.withOpacity(0.75),
-                                    fontSize: 12, letterSpacing: 1)),
-                            const SizedBox(height: 3),
-                            Text(userName,
-                                style: const TextStyle(
-                                    color: _nuWhite, fontSize: 20,
-                                    fontWeight: FontWeight.w800),
-                                overflow: TextOverflow.ellipsis),
-                            const SizedBox(height: 2),
-                            Text(userEmail,
-                                style: TextStyle(
-                                    color: _nuWhite.withOpacity(0.55),
-                                    fontSize: 12),
-                                overflow: TextOverflow.ellipsis),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                  ],
                 ),
-
-                const SizedBox(height: 28),
-
-                // ── Section label ──────────────────────────────────────────
-                Text('QUICK ACTIONS',
-                    style: TextStyle(
-                        fontSize: 11, fontWeight: FontWeight.w700,
-                        color: Colors.black45, letterSpacing: 1.5)),
-
-                const SizedBox(height: 14),
-
-                // ── Action card ────────────────────────────────────────────
-                _ActionCard(
-                  icon: Icons.qr_code_scanner,
-                  title: 'Scan / Enter Code',
-                  subtitle: 'Scan a PC QR code or enter a unique code manually to submit a report',
-                  onTap: () => Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const EnterCodePage())),
-                ),
-
-                const SizedBox(height: 28),
-
-                // ── Info panel ─────────────────────────────────────────────
-                Text('YOUR ACCOUNT',
-                    style: TextStyle(
-                        fontSize: 11, fontWeight: FontWeight.w700,
-                        color: Colors.black45, letterSpacing: 1.5)),
-
-                const SizedBox(height: 14),
-
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.black.withOpacity(0.07)),
-                  ),
-                  child: Column(
-                    children: [
-                      _InfoRow(
-                        icon: Icons.person_outline,
-                        label: 'Full Name',
-                        value: userName,
-                      ),
-                      const Divider(height: 1, indent: 56),
-                      _InfoRow(
-                        icon: Icons.email_outlined,
-                        label: 'Email Address',
-                        value: userEmail,
-                      ),
-                      const Divider(height: 1, indent: 56),
-                      _InfoRow(
-                        icon: Icons.school_outlined,
-                        label: 'Role',
-                        value: 'Student',
-                        valueColor: const Color(0xFF27500A),
-                        valueBg: const Color(0xFFEAF3DE),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -359,7 +377,7 @@ class _DashboardPageState extends State<DashboardPage>
   }
 }
 
-// ── Action Card ───────────────────────────────────────────────────────────────
+// ── Action Card ─────────────────────────────────────────────────────
 class _ActionCard extends StatefulWidget {
   final IconData icon;
   final String title, subtitle;
@@ -444,7 +462,7 @@ class _ActionCardState extends State<_ActionCard> {
   }
 }
 
-// ── Info Row ──────────────────────────────────────────────────────────────────
+// ── Info Row ────────────────────────────────────────────────────────
 class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String label, value;
@@ -480,6 +498,7 @@ class _InfoRow extends StatelessWidget {
                 const SizedBox(height: 2),
                 valueBg != null
                     ? Container(
+                  margin: const EdgeInsets.only(top: 2),
                   padding: const EdgeInsets.symmetric(
                       horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
