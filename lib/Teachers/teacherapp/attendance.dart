@@ -8,6 +8,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:universal_html/html.dart' as html;
 
+// ── NU Clark Brand Colors ──────────────────────────────────────────────────────
+const Color _nuDarkBlue = Color(0xFF001A52);
+const Color _nuBlue     = Color(0xFF003087);
+const Color _nuGold     = Color(0xFFFFD700);
+const Color _nuWhite    = Color(0xFFF8F9FF);
+
 class AttendancePage extends StatefulWidget {
   const AttendancePage({super.key});
 
@@ -324,17 +330,21 @@ class _AttendancePageState extends State<AttendancePage> {
       }
 
       if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Excel exported successfully')),
-      );
+      _snack('Excel exported successfully', isSuccess: true);
     } catch (e) {
       if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Export failed: $e')),
-      );
+      _snack('Export failed: $e');
     }
+  }
+
+  void _snack(String msg, {bool isSuccess = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: isSuccess ? const Color(0xFF3B6D11) : _nuDarkBlue,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    ));
   }
 
   void showAttendanceDetails(
@@ -361,31 +371,99 @@ class _AttendancePageState extends State<AttendancePage> {
 
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text(email),
-        content: SizedBox(
+      builder: (_) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        child: SizedBox(
           width: 420,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: userDocs.length,
-            itemBuilder: (_, index) {
-              final data = userDocs[index].data();
-              final timestamp = data['timestamp'];
-              String scanText = 'No timestamp';
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+                decoration: const BoxDecoration(
+                  color: _nuDarkBlue,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Attendance Details',
+                        style: TextStyle(color: _nuWhite, fontSize: 15, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text(email,
+                        style: TextStyle(color: _nuGold.withOpacity(0.8), fontSize: 11),
+                        overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              ),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 320),
+                child: userDocs.isEmpty
+                    ? const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text('No attendance records found.', style: TextStyle(color: Colors.black38)),
+                )
+                    : ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: userDocs.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF3F4F6)),
+                  itemBuilder: (_, index) {
+                    final data = userDocs[index].data();
+                    final timestamp = data['timestamp'];
+                    String scanText = 'No timestamp';
 
-              if (timestamp is Timestamp) {
-                final dt = timestamp.toDate();
-                scanText =
-                '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
-                    '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')}';
-              }
+                    if (timestamp is Timestamp) {
+                      final dt = timestamp.toDate();
+                      final h = dt.hour == 0 ? 12 : dt.hour > 12 ? dt.hour - 12 : dt.hour;
+                      final m = dt.minute.toString().padLeft(2, '0');
+                      final p = dt.hour >= 12 ? 'PM' : 'AM';
+                      scanText = '$h:$m $p';
+                    }
 
-              return ListTile(
-                leading: const Icon(Icons.calendar_today),
-                title: Text((data['date'] ?? 'No date').toString()),
-                subtitle: Text('Scan time: $scanText'),
-              );
-            },
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 32, height: 32,
+                            decoration: BoxDecoration(color: const Color(0xFFE8EEF8), borderRadius: BorderRadius.circular(8)),
+                            child: const Icon(Icons.calendar_today_outlined, size: 15, color: _nuDarkBlue),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text((data['date'] ?? 'No date').toString(),
+                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
+                                Text('Scan time: $scanText', style: const TextStyle(fontSize: 11, color: Colors.black45)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _nuDarkBlue,
+                      side: BorderSide(color: Colors.black.withOpacity(0.15)),
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: const Text('Close', style: TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -395,47 +473,56 @@ class _AttendancePageState extends State<AttendancePage> {
   Widget buildCurrentClassCard() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.black12),
-        borderRadius: BorderRadius.circular(12),
+        gradient: const LinearGradient(colors: [_nuBlue, _nuDarkBlue]),
+        borderRadius: const BorderRadius.only(
+          topRight: Radius.circular(12),
+          bottomRight: Radius.circular(12),
+        ),
+        border: const Border(left: BorderSide(color: _nuGold, width: 5)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 3))],
       ),
       child: hasOngoingClass
           ? Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Current Class Attendance',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(color: _nuGold, borderRadius: BorderRadius.circular(4)),
+            child: const Text('ONGOING CLASS', style: TextStyle(color: _nuDarkBlue, fontSize: 9, fontWeight: FontWeight.w900)),
           ),
-          const SizedBox(height: 10),
-          Text('Room: $selectedRoom'),
-          Text('Day: $currentDay'),
-          Text('Time: $currentTimeSlot'),
-          Text('Subject: $currentSubject'),
-          Text('Section: $currentSection'),
+          const SizedBox(height: 12),
+          Text(currentSubject, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _classMeta(Icons.access_time, currentTimeSlot),
+              const SizedBox(width: 24),
+              _classMeta(Icons.group_outlined, currentSection),
+              const SizedBox(width: 24),
+              _classMeta(Icons.meeting_room_outlined, 'Room $selectedRoom'),
+            ],
+          ),
         ],
       )
           : Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Current Class Attendance',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text('Room: $selectedRoom'),
-          const Text('No class ongoing right now.'),
+          Text('Room $selectedRoom', style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          const Text('No class ongoing right now.', style: TextStyle(color: Colors.white38, fontSize: 13)),
         ],
       ),
     );
+  }
+
+  Widget _classMeta(IconData icon, String text) {
+    return Row(children: [
+      Icon(icon, size: 14, color: _nuGold.withOpacity(0.7)),
+      const SizedBox(width: 8),
+      Text(text, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+    ]);
   }
 
   @override
@@ -443,68 +530,106 @@ class _AttendancePageState extends State<AttendancePage> {
     final today = DateTime.now().toString().split(' ')[0];
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F2F8),
+      backgroundColor: const Color(0xFFF4F5F8),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF4E5A97),
-        title: const Text(
-          "Attendance",
-          style: TextStyle(color: Colors.white),
+        backgroundColor: _nuDarkBlue,
+        elevation: 0,
+        toolbarHeight: 64,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: _nuGold, size: 18),
+          onPressed: () => Navigator.pop(context),
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+        title: Row(
           children: [
-            Row(
+            Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle, color: Colors.white,
+                border: Border.all(color: _nuGold, width: 2),
+              ),
+              child: ClipOval(child: Image.asset('assets/Images/NUSchoolLogo.png', fit: BoxFit.contain)),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text(
-                  "Room:",
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: Colors.black26),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: DropdownButton<String>(
-                    value: selectedRoom,
-                    underline: const SizedBox(),
-                    items: rooms.map((room) {
-                      return DropdownMenuItem<String>(
-                        value: room,
-                        child: Text('Room $room'),
-                      );
-                    }).toList(),
-                    onChanged: (value) async {
-                      if (value == null) return;
-
-                      setState(() {
-                        selectedRoom = value;
-                      });
-
-                      await loadCurrentSchedule();
-                      _listenToScheduleRealtime();
-                    },
-                  ),
-                ),
+                const Text('ATTENDANCE',
+                    style: TextStyle(color: _nuWhite, fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 2)),
+                Text('NATIONAL UNIVERSITY CLARK · FACULTY',
+                    style: TextStyle(color: _nuGold.withOpacity(0.85), fontSize: 9, fontWeight: FontWeight.w500, letterSpacing: 2)),
               ],
             ),
-            const SizedBox(height: 16),
+          ],
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(3),
+          child: Container(height: 3, color: _nuGold),
+        ),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Toolbar
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.black.withOpacity(0.07)),
+              ),
+              child: Row(
+                children: [
+                  const Text("Select Room:", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.black54)),
+                  const SizedBox(width: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF4F5F8),
+                      border: Border.all(color: Colors.black.withOpacity(0.1)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: selectedRoom,
+                        style: const TextStyle(color: _nuDarkBlue, fontWeight: FontWeight.w600, fontSize: 13),
+                        items: rooms.map((room) => DropdownMenuItem(value: room, child: Text('Room $room'))).toList(),
+                        onChanged: (value) async {
+                          if (value == null) return;
+                          setState(() { selectedRoom = value; });
+                          await loadCurrentSchedule();
+                          _listenToScheduleRealtime();
+                        },
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  // Live status
+                  Row(
+                    children: [
+                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF22C55E), shape: BoxShape.circle)),
+                      const SizedBox(width: 8),
+                      const Text('Live Sync Active', style: TextStyle(fontSize: 12, color: Colors.black45, fontWeight: FontWeight.w500)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
             buildCurrentClassCard(),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             Expanded(
               child: !hasOngoingClass
-                  ? const Center(
-                child: Text(
-                  'No active class attendance to display.',
-                  style: TextStyle(fontSize: 16),
+                  ? Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.event_busy_outlined, size: 52, color: Colors.black12),
+                    const SizedBox(height: 12),
+                    const Text('No active class attendance to display.', style: TextStyle(fontSize: 15, color: Colors.black38)),
+                  ],
                 ),
               )
                   : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -516,81 +641,111 @@ class _AttendancePageState extends State<AttendancePage> {
                     .snapshots(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
-                    return const Center(
-                      child: CircularProgressIndicator(),
-                    );
+                    return const Center(child: CircularProgressIndicator(color: _nuDarkBlue));
                   }
 
                   final docs = snapshot.data!.docs;
-                  final grouped =
-                  groupAttendanceByEmailFromCurrentClass(docs);
+                  final grouped = groupAttendanceByEmailFromCurrentClass(docs);
                   final emails = grouped.keys.toList();
 
                   return Column(
                     children: [
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFF4EACF),
-                            foregroundColor: Colors.black,
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(color: const Color(0xFFE8EEF8), borderRadius: BorderRadius.circular(6)),
+                            child: Text('${emails.length} student${emails.length != 1 ? 's' : ''} scanned',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _nuDarkBlue)),
                           ),
-                          onPressed: () => exportToExcel(docs),
-                          icon: const Icon(Icons.download),
-                          label: const Text("Export Excel"),
-                        ),
+                          const Spacer(),
+                          ElevatedButton.icon(
+                            onPressed: () => exportToExcel(docs),
+                            icon: const Icon(Icons.download_outlined, size: 16),
+                            label: const Text("Export Excel"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _nuDarkBlue,
+                              foregroundColor: _nuGold,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 16),
                       Expanded(
                         child: emails.isEmpty
-                            ? const Center(
-                          child: Text(
-                            'No students have scanned for this class yet.',
-                            style: TextStyle(fontSize: 16),
+                            ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.people_outline, size: 48, color: Colors.black12),
+                              const SizedBox(height: 12),
+                              const Text('No students have scanned for this class yet.', style: TextStyle(fontSize: 14, color: Colors.black38)),
+                            ],
                           ),
                         )
-                            : SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: DataTable(
-                            columns: const [
-                              DataColumn(label: Text('Email')),
-                              DataColumn(label: Text('Present')),
-                              DataColumn(label: Text('Late')),
-                              DataColumn(
-                                label: Text('Attendance Score'),
+                            : Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.black.withOpacity(0.07)),
+                          ),
+                          child: Column(
+                            children: [
+                              // Table Header
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFF9FAFB),
+                                  borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+                                  border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+                                ),
+                                child: const Row(
+                                  children: [
+                                    _HeaderCell(flex: 4, text: 'STUDENT EMAIL'),
+                                    _HeaderCell(flex: 1, text: 'PRESENT'),
+                                    _HeaderCell(flex: 1, text: 'LATE'),
+                                    _HeaderCell(flex: 2, text: 'SCORE'),
+                                    _HeaderCell(flex: 2, text: 'ACTIONS'),
+                                  ],
+                                ),
                               ),
-                              DataColumn(label: Text('Details')),
-                            ],
-                            rows: emails.map((email) {
-                              final present =
-                              grouped[email]!['present']
-                              as double;
-                              final late =
-                              grouped[email]!['late'] as double;
-                              final score = present + late;
+                              // Table Rows
+                              Expanded(
+                                child: ListView.separated(
+                                  itemCount: emails.length,
+                                  separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF3F4F6)),
+                                  itemBuilder: (context, index) {
+                                    final email = emails[index];
+                                    final present = grouped[email]!['present'] as double;
+                                    final late = grouped[email]!['late'] as double;
+                                    final score = present + late;
 
-                              return DataRow(
-                                cells: [
-                                  DataCell(Text(email)),
-                                  DataCell(
-                                      Text(present.toString())),
-                                  DataCell(Text(late.toString())),
-                                  DataCell(Text(score.toString())),
-                                  DataCell(
-                                    ElevatedButton(
-                                      onPressed: () {
-                                        showAttendanceDetails(
-                                          context,
-                                          email,
-                                          docs,
-                                        );
-                                      },
-                                      child: const Text("Details"),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }).toList(),
+                                    return _AttendanceRow(
+                                      email: email,
+                                      present: present,
+                                      late: late,
+                                      score: score,
+                                      onDetails: () => showAttendanceDetails(context, email, docs),
+                                    );
+                                  },
+                                ),
+                              ),
+                              // Footer
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFF9FAFB),
+                                  border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+                                  borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
+                                ),
+                                child: Text('${emails.length} record${emails.length != 1 ? 's' : ''}',
+                                    style: const TextStyle(fontSize: 12, color: Colors.black45, fontWeight: FontWeight.w500)),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -604,4 +759,124 @@ class _AttendancePageState extends State<AttendancePage> {
       ),
     );
   }
+}
+
+class _AttendanceRow extends StatefulWidget {
+  final String email;
+  final double present, late, score;
+  final VoidCallback onDetails;
+
+  const _AttendanceRow({
+    required this.email, required this.present,
+    required this.late, required this.score,
+    required this.onDetails,
+  });
+
+  @override
+  State<_AttendanceRow> createState() => _AttendanceRowState();
+}
+
+class _AttendanceRowState extends State<_AttendanceRow> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scoreColor = widget.score >= 1.0 ? const Color(0xFF27500A) : const Color(0xFF791F1F);
+    final scoreBg = widget.score >= 1.0 ? const Color(0xFFEAF3DE) : const Color(0xFFFCEBEB);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 100),
+        color: _hovered ? const Color(0xFFF8FAFF) : Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 4,
+              child: Row(
+                children: [
+                  Container(
+                    width: 30, height: 30,
+                    decoration: BoxDecoration(color: const Color(0xFFE8EEF8), borderRadius: BorderRadius.circular(6)),
+                    child: Center(
+                      child: Text(widget.email.isNotEmpty ? widget.email[0].toUpperCase() : '?',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _nuDarkBlue)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(widget.email, style: const TextStyle(fontSize: 13, color: Color(0xFF374151)), overflow: TextOverflow.ellipsis)),
+                ],
+              ),
+            ),
+            Expanded(flex: 1, child: Text(widget.present.toStringAsFixed(0), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF374151)))),
+            Expanded(flex: 1, child: Text(widget.late.toStringAsFixed(0), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF374151)))),
+            Expanded(
+              flex: 2,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  width: 48, padding: const EdgeInsets.symmetric(vertical: 4),
+                  decoration: BoxDecoration(color: scoreBg, borderRadius: BorderRadius.circular(8), border: Border.all(color: scoreColor.withOpacity(0.2))),
+                  child: Text(widget.score.toStringAsFixed(1), textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: scoreColor)),
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _DetailsBtn(onTap: widget.onDetails),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailsBtn extends StatefulWidget {
+  final VoidCallback onTap;
+  const _DetailsBtn({required this.onTap});
+
+  @override
+  State<_DetailsBtn> createState() => _DetailsBtnState();
+}
+
+class _DetailsBtnState extends State<_DetailsBtn> {
+  bool _h = false;
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _h = true),
+      onExit: (_) => setState(() => _h = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          decoration: BoxDecoration(
+            color: _h ? _nuDarkBlue : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: _h ? _nuDarkBlue : Colors.black.withOpacity(0.12), width: 1.5),
+          ),
+          child: Text('Details', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _h ? _nuGold : _nuDarkBlue)),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderCell extends StatelessWidget {
+  final int flex;
+  final String text;
+  const _HeaderCell({required this.flex, required this.text});
+  @override
+  Widget build(BuildContext context) => Expanded(
+    flex: flex,
+    child: Text(text, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.black45, letterSpacing: 0.8)),
+  );
 }
