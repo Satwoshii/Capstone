@@ -5,7 +5,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'login/services/jwt_service.dart';
 import '../studentapp/login/services/ai_helper_service.dart';
 
+// ── NU Clark Brand Colors ──────────────────────────────────────────────────────
 const Color _nuDarkBlue = Color(0xFF001A52);
+const Color _nuBlue = Color(0xFF003087);
 const Color _nuGold = Color(0xFFFFD700);
 const Color _nuWhite = Color(0xFFF8F9FF);
 
@@ -51,6 +53,10 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
   bool _aiTriedFix = false;
   bool? _aiSolved;
 
+  int _aiAttemptCount = 0;
+  final List<String> _aiAttemptHistory = [];
+  String? _currentAiTip;
+
   late AnimationController _fadeCtrl;
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
@@ -59,7 +65,6 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
   void initState() {
     super.initState();
     _loadPageData();
-
     _fadeCtrl = AnimationController(
       duration: const Duration(milliseconds: 700),
       vsync: this,
@@ -68,7 +73,9 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
     _slideAnim = Tween<Offset>(
       begin: const Offset(0, 0.06),
       end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut));
+    ).animate(
+      CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut),
+    );
   }
 
   @override
@@ -83,7 +90,6 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
   Future<void> _loadPageData() async {
     await _loadLoggedInUser();
     await _loadPcData();
-
     if (mounted) {
       setState(() => _loading = false);
       _fadeCtrl.forward();
@@ -109,8 +115,8 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
         return;
       }
 
-      final String uid = (payload['uid'] ?? '').toString();
-      final String tokenName =
+      final uid = (payload['uid'] ?? '').toString();
+      final tokenName =
       (payload['full_name'] ?? payload['name'] ?? 'Student').toString();
       final String tokenEmail = (payload['email'] ?? '').toString();
 
@@ -151,9 +157,7 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
 
       _pcCode = code;
 
-      if (!doc.exists) {
-        return;
-      }
+      if (!doc.exists) return;
 
       final data = doc.data()!;
       _lab = (data['lab'] ?? '').toString();
@@ -180,55 +184,117 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
   }
 
   String _problemSentence() {
-    final problems = _getProblemList();
+    final p = _getProblemList();
 
-    if (problems.isEmpty) return 'workstation';
-    if (problems.length == 1) return problems.first;
-    if (problems.length == 2) return '${problems[0]} and ${problems[1]}';
-
-    return '${problems.sublist(0, problems.length - 1).join(', ')}, and ${problems.last}';
+    if (p.isEmpty) return 'workstation';
+    if (p.length == 1) return p.first;
+    if (p.length == 2) return '${p[0]} and ${p[1]}';
+    return '${p.sublist(0, p.length - 1).join(', ')}, and ${p.last}';
   }
 
   String _capitalize(String value) {
     if (value.trim().isEmpty) return value;
-    final text = value.trim();
-    return text[0].toUpperCase() + text.substring(1);
+    final t = value.trim();
+    return t[0].toUpperCase() + t.substring(1);
   }
 
   String _normalizeTipToAttempt(String text) {
-    String cleaned = text.trim();
+    String c = text.trim();
+    if (c.isEmpty) return 'basic troubleshooting';
+    if (c.endsWith('.')) c = c.substring(0, c.length - 1);
 
-    if (cleaned.isEmpty) {
-      return 'basic troubleshooting';
+    final l = c.toLowerCase();
+    if (l.startsWith('have you tried ')) {
+      c = c.substring(15).trim();
+    } else if (l.startsWith('try ')) {
+      c = c.substring(4).trim();
+    } else if (l.startsWith('please try ')) {
+      c = c.substring(11).trim();
     }
 
-    if (cleaned.endsWith('.')) {
-      cleaned = cleaned.substring(0, cleaned.length - 1);
+    return c.isEmpty ? 'basic troubleshooting' : c;
+  }
+
+  String _currentAttemptText() {
+    if ((_currentAiTip ?? '').trim().isNotEmpty) {
+      return _normalizeTipToAttempt(_currentAiTip!);
+    }
+    if (_aiResult != null) {
+      return _normalizeTipToAttempt(_aiResult!.studentTip);
+    }
+    return 'basic troubleshooting';
+  }
+
+  List<String> _buildAlternativeTips() {
+    final tips = <String>[];
+
+    if (!_keyboardOk) {
+      tips.addAll([
+        'Please check if the keyboard cable is securely plugged into the PC.',
+        'Please unplug the keyboard and plug it back in firmly.',
+        'Try restarting the computer and test the keyboard again.',
+      ]);
     }
 
-    final lower = cleaned.toLowerCase();
-
-    if (lower.startsWith('have you tried ')) {
-      cleaned = cleaned.substring(15).trim();
-    } else if (lower.startsWith('try ')) {
-      cleaned = cleaned.substring(4).trim();
-    } else if (lower.startsWith('please try ')) {
-      cleaned = cleaned.substring(11).trim();
+    if (!_mouseOk) {
+      tips.addAll([
+        'Please check if the mouse cable is securely plugged into the PC.',
+        'Please reconnect the mouse and try moving it again.',
+        'Try another USB port for the mouse if available.',
+      ]);
     }
 
-    if (cleaned.isEmpty) {
-      return 'basic troubleshooting';
+    if (!_monitorOk) {
+      tips.addAll([
+        'Please check if the monitor power cable is connected properly.',
+        'Make sure the monitor is turned on and the display cable is secure.',
+        'Try checking whether the monitor input source is correct.',
+      ]);
     }
 
-    return cleaned;
+    if (!_cablesOk) {
+      tips.addAll([
+        'Please check if all cables are connected properly.',
+        'Reconnect the loose cables securely.',
+        'Inspect the cables for visible damage before reporting to ITSO.',
+      ]);
+    }
+
+    if (!_systemUnitOk) {
+      tips.addAll([
+        'Please check if the system unit is powered on properly.',
+        'Try checking the power cable of the system unit.',
+        'Listen for any unusual sound and report it if the PC still does not work.',
+      ]);
+    }
+
+    if (tips.isEmpty) {
+      tips.addAll([
+        'Please recheck the workstation connections carefully.',
+        'Try restarting the workstation and test it again.',
+        'If the issue still continues, report it to ITSO.',
+      ]);
+    }
+
+    return tips.toSet().toList();
+  }
+
+  String _getNextAlternativeTip() {
+    final allTips = _buildAlternativeTips();
+
+    for (final tip in allTips) {
+      if (!_aiAttemptHistory.contains(tip.trim())) {
+        return tip.trim();
+      }
+    }
+
+    return 'If the problem still continues after basic troubleshooting, report it to ITSO.';
   }
 
   String _buildMascotMessage(AiHelperResult result) {
     final problem = _problemSentence();
-    final attempt = _normalizeTipToAttempt(result.studentTip);
-
-    return 'It seems like you have a problem with the $problem. '
-        'Have you tried $attempt?';
+    final attempt = _currentAttemptText();
+    return 'It seems like you have a problem with the $problem. Have you tried $attempt?';
   }
 
   String _buildFinalIncidentNarrative({
@@ -237,48 +303,39 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
     required bool solved,
   }) {
     final problem = _problemSentence();
-    final attempt = _normalizeTipToAttempt(aiResult.studentTip);
-    final cleanComment = originalComment.trim();
+    final attempt = _currentAttemptText();
+    final cleanCmt = originalComment.trim();
 
     if (solved) {
-      return 'This PC had a problem with the $problem. '
-          'The student tried $attempt and confirmed that the issue was fixed.';
+      return 'This PC had a problem with the $problem. The student tried $attempt and confirmed that the issue was fixed.';
     }
 
-    if (cleanComment.isNotEmpty) {
-      return 'This PC has a problem with the $problem. '
-          'The student reported: "$cleanComment". '
-          'The student tried $attempt, but the issue still persists.';
+    if (cleanCmt.isNotEmpty) {
+      return 'This PC has a problem with the $problem. The student reported: "$cleanCmt". The student tried $attempt, but the issue still persists after $_aiAttemptCount attempt(s).';
     }
 
-    return 'This PC has a problem with the $problem and the student has tried '
-        '$attempt, but the problem still persists.';
+    return 'This PC has a problem with the $problem and the student has tried $attempt, but the problem still persists after $_aiAttemptCount attempt(s).';
   }
 
   String _buildFallbackNarrative(String originalComment) {
     final problem = _problemSentence();
-    final cleanComment = originalComment.trim();
+    final cleanCmt = originalComment.trim();
 
-    if (cleanComment.isEmpty) {
+    if (cleanCmt.isEmpty) {
       return 'This PC has a problem with the $problem.';
     }
 
-    return 'This PC has a problem with the $problem. '
-        'Student description: "$cleanComment".';
+    return 'This PC has a problem with the $problem. Student description: "$cleanCmt".';
   }
 
   Future<void> _openAiHelper() async {
     if (_pcCode == null || _pcCode!.isEmpty || _lab == null || _pcLabel == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Missing PC information.')),
-      );
+      _snack('Missing PC information.');
       return;
     }
 
     if (_commentCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please describe the issue first.')),
-      );
+      _snack('Please describe the issue first.');
       return;
     }
 
@@ -288,6 +345,9 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
       _aiResult = null;
       _aiTriedFix = false;
       _aiSolved = null;
+      _aiAttemptCount = 1;
+      _aiAttemptHistory.clear();
+      _currentAiTip = null;
     });
 
     final result = await AiHelperService.generate(
@@ -310,16 +370,41 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
       _loadingAi = false;
       _aiResult = result;
       _showAiSuggestion = result != null;
+      _currentAiTip = result?.studentTip;
+      if (result != null && result.studentTip.trim().isNotEmpty) {
+        _aiAttemptHistory.add(result.studentTip.trim());
+      }
     });
 
     if (result == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Mascot helper failed. Check logs.')),
-      );
+      _snack('Lab Buddy failed. Check logs.');
     }
   }
 
-  Future<void> _submitReport() async {
+  Future<void> _handleAiNotSolved() async {
+    setState(() {
+      _aiTriedFix = true;
+      _aiSolved = false;
+      _aiAttemptCount++;
+    });
+
+    if (_aiAttemptCount >= 3) {
+      _snack('3 attempts failed. Sending report automatically to ITSO...');
+      await _submitReport(autoSubmittedByAi: true);
+      return;
+    }
+
+    final nextTip = _getNextAlternativeTip();
+
+    setState(() {
+      _currentAiTip = nextTip;
+      _aiAttemptHistory.add(nextTip.trim());
+    });
+
+    _snack('Lab Buddy gave another suggestion. Attempt $_aiAttemptCount of 3.');
+  }
+
+  Future<void> _submitReport({bool autoSubmittedByAi = false}) async {
     if (!_formKey.currentState!.validate()) return;
     if (_pcCode == null || _pcCode!.isEmpty) return;
 
@@ -337,10 +422,7 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
     };
 
     bool hasProblem = peripherals.values.any((e) => e == false);
-
-    if (_aiSolved == true) {
-      hasProblem = false;
-    }
+    if (_aiSolved == true) hasProblem = false;
 
     final bool reportHealthy = _aiSolved == true;
     final bool sendToItso = _aiSolved != true;
@@ -371,13 +453,16 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
         'report_route': reportHealthy ? 'healthy' : 'itso',
         'ai_category': _aiResult?.category ?? '',
         'ai_priority': _aiResult?.priority ?? '',
-        'ai_student_tip': _aiResult?.studentTip ?? '',
+        'ai_student_tip': _currentAiTip ?? _aiResult?.studentTip ?? '',
         'ai_action_done_template': _aiResult?.actionDoneTemplate ?? '',
-        'ai_escalate_to_itso': _aiResult?.escalateToItso ?? sendToItso,
+        'ai_escalate_to_itso': sendToItso,
         'ai_itso_action': _aiResult?.itsoAction ?? '',
         'ai_attempted_fix': _showAiSuggestion,
         'ai_resolved': _aiSolved == true,
         'ai_attempt_summary': finalNarrative,
+        'ai_attempt_count': _aiAttemptCount,
+        'ai_attempt_history': _aiAttemptHistory,
+        'auto_submitted_by_ai': autoSubmittedByAi,
       });
 
       await FirebaseFirestore.instance.collection('attendance').add({
@@ -385,9 +470,11 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
         'student_email': studentEmail,
         'lab': _lab ?? '',
         'pc': _pcLabel ?? '',
+        'pc_code': _pcCode ?? '',
         'present': 1.0,
         'late': 0.0,
         'attendance_score': 1.0,
+        'attendance_type': 'report_submission',
         'date': DateTime.now().toString().split(' ')[0],
         'timestamp': FieldValue.serverTimestamp(),
       });
@@ -403,31 +490,26 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
         'peripherals': peripherals,
         'ai_category': _aiResult?.category ?? '',
         'ai_priority': _aiResult?.priority ?? '',
-        'ai_student_tip': _aiResult?.studentTip ?? '',
-        'ai_escalate_to_itso': _aiResult?.escalateToItso ?? sendToItso,
+        'ai_student_tip': _currentAiTip ?? _aiResult?.studentTip ?? '',
+        'ai_escalate_to_itso': sendToItso,
         'ai_itso_action': _aiResult?.itsoAction ?? '',
         'ai_attempted_fix': _showAiSuggestion,
         'ai_resolved': _aiSolved == true,
         'ai_attempt_summary': finalNarrative,
+        'ai_attempt_count': _aiAttemptCount,
+        'ai_attempt_history': _aiAttemptHistory,
+        'auto_submitted_by_ai': autoSubmittedByAi,
       });
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            reportHealthy
-                ? 'Problem fixed. Report saved as healthy.'
-                : 'Problem submitted to ITSO.',
-          ),
-          backgroundColor:
-          reportHealthy ? const Color(0xFF3B6D11) : _nuDarkBlue,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-      );
+      if (autoSubmittedByAi) {
+        _snack('Third failed attempt reached. Report automatically sent to ITSO.');
+      } else if (reportHealthy) {
+        _snack('Problem fixed. Report saved as healthy and attendance recorded.', isSuccess: true);
+      } else {
+        _snack('Problem submitted to ITSO and attendance recorded.');
+      }
 
       _commentCtrl.clear();
 
@@ -441,20 +523,13 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
         _showAiSuggestion = false;
         _aiTriedFix = false;
         _aiSolved = null;
+        _aiAttemptCount = 0;
+        _aiAttemptHistory.clear();
+        _currentAiTip = null;
       });
     } catch (e) {
       if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to submit report: $e'),
-          backgroundColor: _nuDarkBlue,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-      );
+      _snack('Failed to submit report: $e');
     } finally {
       if (mounted) {
         setState(() => _submitting = false);
@@ -462,12 +537,22 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
     }
   }
 
+  void _snack(String msg, {bool isSuccess = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isSuccess ? const Color(0xFF3B6D11) : _nuDarkBlue,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return Scaffold(
-        backgroundColor: const Color(0xFFF4F5F8),
-        body: const Center(child: CircularProgressIndicator()),
+      return const Scaffold(
+        backgroundColor: Color(0xFFF4F5F8),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
@@ -485,17 +570,46 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
       );
     }
 
-    final allOk =
-        _mouseOk && _keyboardOk && _monitorOk && _cablesOk && _systemUnitOk;
-
     return Scaffold(
       backgroundColor: const Color(0xFFF4F5F8),
       appBar: AppBar(
         backgroundColor: _nuDarkBlue,
         elevation: 0,
-        title: const Text(
-          'PC REPORT',
-          style: TextStyle(color: _nuWhite, fontWeight: FontWeight.w800),
+        toolbarHeight: 64,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: _nuGold, size: 18),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+                border: Border.all(color: _nuGold, width: 2),
+              ),
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/Images/NUSchoolLogo.png',
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Flexible(
+              child: Text(
+                'PC REPORT',
+                style: TextStyle(
+                  color: _nuWhite,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2,
+                ),
+              ),
+            ),
+          ],
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(3),
@@ -513,218 +627,346 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
                 constraints: const BoxConstraints(maxWidth: 680),
                 child: Form(
                   key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: _nuDarkBlue,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '$_lab · $_pcLabel',
-                              style: const TextStyle(
-                                color: _nuWhite,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              _pcCode!,
-                              style: TextStyle(
-                                color: _nuGold.withOpacity(0.9),
-                                fontSize: 12,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              allOk ? 'All OK' : 'Issues detected',
-                              style: TextStyle(
-                                color: allOk
-                                    ? const Color(0xFF9FE1CB)
-                                    : const Color(0xFFFCA5A5),
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      _FormPanel(
-                        title: 'Student Information',
-                        child: Column(
-                          children: [
-                            _ReadOnlyField(
-                              label: 'FULL NAME',
-                              controller: _nameCtrl,
-                            ),
-                            const SizedBox(height: 12),
-                            _ReadOnlyField(
-                              label: 'STUDENT EMAIL',
-                              controller: _emailCtrl,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _FormPanel(
-                        title: 'Peripheral Status',
-                        child: Column(
-                          children: [
-                            _PeripheralTile(
-                              label: 'Mouse',
-                              value: _mouseOk,
-                              onChanged: (v) =>
-                                  setState(() => _mouseOk = v ?? true),
-                            ),
-                            _PeripheralTile(
-                              label: 'Keyboard',
-                              value: _keyboardOk,
-                              onChanged: (v) =>
-                                  setState(() => _keyboardOk = v ?? true),
-                            ),
-                            _PeripheralTile(
-                              label: 'Monitor',
-                              value: _monitorOk,
-                              onChanged: (v) =>
-                                  setState(() => _monitorOk = v ?? true),
-                            ),
-                            _PeripheralTile(
-                              label: 'Cables',
-                              value: _cablesOk,
-                              onChanged: (v) =>
-                                  setState(() => _cablesOk = v ?? true),
-                            ),
-                            _PeripheralTile(
-                              label: 'System Unit',
-                              value: _systemUnitOk,
-                              onChanged: (v) =>
-                                  setState(() => _systemUnitOk = v ?? true),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _FormPanel(
-                        title: 'Comment / Issue',
-                        child: TextFormField(
-                          controller: _commentCtrl,
-                          maxLines: 4,
-                          validator: (value) {
-                            if ((value ?? '').trim().isEmpty) {
-                              return 'Please describe the issue first.';
-                            }
-                            return null;
-                          },
-                          decoration: InputDecoration(
-                            hintText:
-                            'Example: The keyboard is not responding even after reconnecting it.',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: _loadingAi ? null : _openAiHelper,
-                          icon: _loadingAi
-                              ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                            ),
-                          )
-                              : const Icon(Icons.smart_toy_outlined),
-                          label: Text(
-                            _loadingAi
-                                ? 'Opening Lab Buddy...'
-                                : 'Ask Lab Buddy',
-                          ),
-                        ),
-                      ),
-                      if (_showAiSuggestion && _aiResult != null) ...[
-                        const SizedBox(height: 16),
-                        _MascotHelperCard(
-                          mascotName: 'Lab Buddy',
-                          issueType: _capitalize(_problemSentence()),
-                          priority: _aiResult!.priority,
-                          message: _buildMascotMessage(_aiResult!),
-                          tip: _aiResult!.studentTip,
-                          solved: _aiSolved,
-                          onSolved: () {
-                            setState(() {
-                              _aiTriedFix = true;
-                              _aiSolved = true;
-                            });
-                          },
-                          onNotSolved: () {
-                            setState(() {
-                              _aiTriedFix = true;
-                              _aiSolved = false;
-                            });
-                          },
-                        ),
-                        if (_aiTriedFix && _aiSolved == false) ...[
-                          const SizedBox(height: 12),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isWide = constraints.maxWidth > 500;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Container(
                             width: double.infinity,
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFF7E8),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: const Color(0xFFFFD58A),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 22,
+                              vertical: 16,
+                            ),
+                            decoration: const BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [Color(0xFF003087), Color(0xFF001A52)],
+                              ),
+                              borderRadius: BorderRadius.only(
+                                topRight: Radius.circular(12),
+                                bottomRight: Radius.circular(12),
+                              ),
+                              border: Border(
+                                left: BorderSide(color: _nuGold, width: 5),
                               ),
                             ),
-                            child: Text(
-                              _buildFinalIncidentNarrative(
-                                originalComment: _commentCtrl.text.trim(),
-                                aiResult: _aiResult!,
-                                solved: false,
-                              ),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 46,
+                                  height: 46,
+                                  decoration: BoxDecoration(
+                                    color: _nuGold.withOpacity(0.12),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: _nuGold.withOpacity(0.4),
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.desktop_windows_outlined,
+                                    color: _nuGold,
+                                    size: 22,
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '$_lab · $_pcLabel',
+                                        style: const TextStyle(
+                                          color: _nuWhite,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        _pcCode!,
+                                        style: TextStyle(
+                                          color: _nuGold.withOpacity(0.75),
+                                          fontSize: 11,
+                                          fontFamily: 'monospace',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+
+                          _FormPanel(
+                            dotColor: const Color(0xFF185FA5),
+                            title: 'Student Information',
+                            child: isWide
+                                ? Row(
+                              children: [
+                                Expanded(
+                                  child: _ReadOnlyField(
+                                    label: 'FULL NAME',
+                                    controller: _nameCtrl,
+                                    icon: Icons.person_outline,
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: _ReadOnlyField(
+                                    label: 'STUDENT EMAIL',
+                                    controller: _emailCtrl,
+                                    icon: Icons.email_outlined,
+                                  ),
+                                ),
+                              ],
+                            )
+                                : Column(
+                              children: [
+                                _ReadOnlyField(
+                                  label: 'FULL NAME',
+                                  controller: _nameCtrl,
+                                  icon: Icons.person_outline,
+                                ),
+                                const SizedBox(height: 14),
+                                _ReadOnlyField(
+                                  label: 'STUDENT EMAIL',
+                                  controller: _emailCtrl,
+                                  icon: Icons.email_outlined,
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          _FormPanel(
+                            dotColor: _nuGold,
+                            title: 'Peripheral Status',
+                            subtitle: 'Uncheck any item that has a problem',
+                            child: Wrap(
+                              spacing: 16,
+                              runSpacing: 0,
+                              children: [
+                                SizedBox(
+                                  width: isWide
+                                      ? (constraints.maxWidth - 52) / 2
+                                      : double.infinity,
+                                  child: _PeripheralTile(
+                                    label: 'Mouse',
+                                    icon: Icons.mouse_outlined,
+                                    value: _mouseOk,
+                                    onChanged: (v) =>
+                                        setState(() => _mouseOk = v ?? true),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: isWide
+                                      ? (constraints.maxWidth - 52) / 2
+                                      : double.infinity,
+                                  child: _PeripheralTile(
+                                    label: 'Keyboard',
+                                    icon: Icons.keyboard_outlined,
+                                    value: _keyboardOk,
+                                    onChanged: (v) =>
+                                        setState(() => _keyboardOk = v ?? true),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: isWide
+                                      ? (constraints.maxWidth - 52) / 2
+                                      : double.infinity,
+                                  child: _PeripheralTile(
+                                    label: 'Monitor',
+                                    icon: Icons.monitor_outlined,
+                                    value: _monitorOk,
+                                    onChanged: (v) =>
+                                        setState(() => _monitorOk = v ?? true),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: isWide
+                                      ? (constraints.maxWidth - 52) / 2
+                                      : double.infinity,
+                                  child: _PeripheralTile(
+                                    label: 'Cables',
+                                    icon: Icons.cable_outlined,
+                                    value: _cablesOk,
+                                    onChanged: (v) =>
+                                        setState(() => _cablesOk = v ?? true),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: isWide
+                                      ? (constraints.maxWidth - 52) / 2
+                                      : double.infinity,
+                                  child: _PeripheralTile(
+                                    label: 'System Unit',
+                                    icon: Icons.computer_outlined,
+                                    value: _systemUnitOk,
+                                    onChanged: (v) =>
+                                        setState(() => _systemUnitOk = v ?? true),
+                                    isLast: true,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          _FormPanel(
+                            dotColor: const Color(0xFF639922),
+                            title: 'Comment / Issue',
+                            subtitle: 'Describe the problem in detail',
+                            child: TextFormField(
+                              controller: _commentCtrl,
+                              maxLines: 4,
+                              style: const TextStyle(fontSize: 14),
+                              validator: (v) {
+                                if ((v ?? '').trim().isEmpty) {
+                                  return 'Please describe the issue first.';
+                                }
+                                return null;
+                              },
+                              decoration: InputDecoration(
+                                hintText:
+                                'Example: The keyboard is not responding...',
+                                hintStyle: const TextStyle(
+                                  color: Colors.black26,
+                                  fontSize: 13,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide(
+                                    color: Colors.black.withOpacity(0.12),
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide(
+                                    color: Colors.black.withOpacity(0.12),
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(
+                                    color: _nuDarkBlue,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                contentPadding: const EdgeInsets.all(14),
                               ),
                             ),
                           ),
+
+                          const SizedBox(height: 16),
+
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: _loadingAi ? null : _openAiHelper,
+                              icon: _loadingAi
+                                  ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: _nuDarkBlue,
+                                ),
+                              )
+                                  : const Icon(
+                                Icons.smart_toy_outlined,
+                                size: 18,
+                              ),
+                              label: Text(
+                                _loadingAi
+                                    ? 'Opening Lab Buddy…'
+                                    : 'Ask Lab Buddy',
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: _nuDarkBlue,
+                                side: const BorderSide(
+                                  color: _nuDarkBlue,
+                                  width: 1.5,
+                                ),
+                                padding:
+                                const EdgeInsets.symmetric(vertical: 13),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                textStyle: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          if (_showAiSuggestion && _aiResult != null) ...[
+                            const SizedBox(height: 16),
+                            _MascotHelperCard(
+                              mascotName: 'Lab Buddy',
+                              issueType: _capitalize(_problemSentence()),
+                              priority: _aiResult!.priority,
+                              message: _buildMascotMessage(_aiResult!),
+                              tip: _currentAiTip ?? _aiResult!.studentTip,
+                              solved: _aiSolved,
+                              attemptCount: _aiAttemptCount,
+                              onSolved: () {
+                                setState(() {
+                                  _aiTriedFix = true;
+                                  _aiSolved = true;
+                                });
+                                _snack('Marked as solved. You can now submit.');
+                              },
+                              onNotSolved: () async {
+                                await _handleAiNotSolved();
+                              },
+                            ),
+                          ],
+
+                          const SizedBox(height: 24),
+
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: _submitting ? null : _submitReport,
+                              icon: _submitting
+                                  ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  color: _nuGold,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                                  : const Icon(Icons.send_outlined, size: 18),
+                              label: Text(
+                                _submitting ? 'Submitting…' : 'Submit Report',
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _nuDarkBlue,
+                                foregroundColor: _nuGold,
+                                padding:
+                                const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                textStyle: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
                         ],
-                      ],
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: _submitting ? null : _submitReport,
-                          icon: _submitting
-                              ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              color: _nuGold,
-                              strokeWidth: 2,
-                            ),
-                          )
-                              : const Icon(Icons.send_outlined),
-                          label: Text(
-                            _submitting ? 'Submitting...' : 'Submit Report',
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _nuDarkBlue,
-                            foregroundColor: _nuGold,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                          ),
-                        ),
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ),
               ),
@@ -736,6 +978,227 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
   }
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────────────
+class _FormPanel extends StatelessWidget {
+  final Color dotColor;
+  final String title;
+  final String? subtitle;
+  final Widget child;
+
+  const _FormPanel({
+    required this.dotColor,
+    required this.title,
+    required this.child,
+    this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.only(bottom: 4),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: Colors.black.withOpacity(0.07)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+          decoration: const BoxDecoration(
+            color: Color(0xFFF9FAFB),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+            border: Border(
+              bottom: BorderSide(color: Color(0xFFE5E7EB)),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: dotColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: _nuDarkBlue,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              if (subtitle != null)
+                Flexible(
+                  child: Text(
+                    ' · $subtitle',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Colors.black38,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(18),
+          child: child,
+        ),
+      ],
+    ),
+  );
+}
+
+class _ReadOnlyField extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+  final IconData icon;
+
+  const _ReadOnlyField({
+    required this.label,
+    required this.controller,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: Colors.black45,
+          letterSpacing: 0.8,
+        ),
+      ),
+      const SizedBox(height: 6),
+      TextFormField(
+        controller: controller,
+        readOnly: true,
+        style: const TextStyle(
+          fontSize: 14,
+          color: Color(0xFF374151),
+        ),
+        decoration: InputDecoration(
+          filled: true,
+          fillColor: const Color(0xFFF4F5F8),
+          prefixIcon: Icon(icon, color: _nuDarkBlue, size: 18),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide:
+            BorderSide(color: Colors.black.withOpacity(0.08)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide:
+            BorderSide(color: Colors.black.withOpacity(0.08)),
+          ),
+          contentPadding:
+          const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          isDense: true,
+        ),
+      ),
+    ],
+  );
+}
+
+class _PeripheralTile extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool value;
+  final ValueChanged<bool?> onChanged;
+  final bool isLast;
+
+  const _PeripheralTile({
+    required this.label,
+    required this.icon,
+    required this.value,
+    required this.onChanged,
+    this.isLast = false,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      border: isLast
+          ? null
+          : const Border(
+        bottom: BorderSide(color: Color(0xFFF3F4F6)),
+      ),
+    ),
+    child: InkWell(
+      onTap: () => onChanged(!value),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: value
+                    ? const Color(0xFFEAF3DE)
+                    : const Color(0xFFFCEBEB),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                icon,
+                size: 17,
+                color: value
+                    ? const Color(0xFF3B6D11)
+                    : const Color(0xFF791F1F),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF111827),
+                    ),
+                  ),
+                  Text(
+                    value ? 'Working fine' : 'Has a problem',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: value
+                          ? const Color(0xFF639922)
+                          : const Color(0xFFE24B4A),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Checkbox(
+              value: value,
+              onChanged: onChanged,
+              activeColor: const Color(0xFF639922),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 class _MascotHelperCard extends StatelessWidget {
   final String mascotName;
   final String issueType;
@@ -743,6 +1206,7 @@ class _MascotHelperCard extends StatelessWidget {
   final String message;
   final String tip;
   final bool? solved;
+  final int attemptCount;
   final VoidCallback onSolved;
   final VoidCallback onNotSolved;
 
@@ -753,264 +1217,131 @@ class _MascotHelperCard extends StatelessWidget {
     required this.message,
     required this.tip,
     required this.solved,
+    required this.attemptCount,
     required this.onSolved,
     required this.onNotSolved,
   });
 
   @override
   Widget build(BuildContext context) {
-    final Color badgeColor = priority.toLowerCase() == 'high'
-        ? const Color(0xFFE24B4A)
-        : priority.toLowerCase() == 'medium'
-        ? const Color(0xFFF59E0B)
-        : const Color(0xFF3B82F6);
-
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.black12),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x11000000),
-            blurRadius: 8,
-            offset: Offset(0, 3),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.black.withOpacity(0.08)),
       ),
       child: Column(
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 62,
-                height: 62,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF3BF),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: _nuGold, width: 2),
-                ),
-                child: const Icon(
-                  Icons.smart_toy_rounded,
-                  color: _nuDarkBlue,
-                  size: 34,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFF),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFD9E2FF)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
-                            mascotName,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: _nuDarkBlue,
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: badgeColor.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              'Priority: $priority',
-                              style: TextStyle(
-                                color: badgeColor,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Detected issue: $issueType',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        message,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          height: 1.4,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Suggested step: $tip',
-                        style: const TextStyle(
-                          color: Colors.black87,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Were you able to solve it?',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: onSolved,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF3B6D11),
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('YES, SOLVED'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: onNotSolved,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE24B4A),
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('NO, STILL NOT SOLVED'),
-                ),
-              ),
-            ],
-          ),
-          if (solved != null) ...[
-            const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                solved == true
-                    ? 'Great. The issue will be saved as resolved.'
-                    : 'The issue will be forwarded to ITSO with your attempted fix.',
-                style: TextStyle(
-                  color: solved == true
-                      ? const Color(0xFF3B6D11)
-                      : const Color(0xFF9A3412),
-                  fontWeight: FontWeight.w700,
-                ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF9FAFB),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+              border: Border(
+                bottom: BorderSide(color: Color(0xFFE5E7EB)),
               ),
             ),
-          ],
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: _nuGold,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Lab Buddy',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: _nuDarkBlue,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  'Priority: $priority',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: _nuDarkBlue,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Attempt $attemptCount of 3',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: _nuDarkBlue,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  message,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFF374151),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Suggestion: $tip',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF4B5563),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: onSolved,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF3B6D11),
+                        ),
+                        child: const Text(
+                          'YES, SOLVED',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: onNotSolved,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFE24B4A),
+                        ),
+                        child: const Text(
+                          'STILL NOT SOLVED',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
       ),
-    );
-  }
-}
-
-class _FormPanel extends StatelessWidget {
-  final String title;
-  final Widget child;
-
-  const _FormPanel({
-    required this.title,
-    required this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.black12),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                color: _nuDarkBlue,
-              ),
-            ),
-            const SizedBox(height: 12),
-            child,
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ReadOnlyField extends StatelessWidget {
-  final String label;
-  final TextEditingController controller;
-
-  const _ReadOnlyField({
-    required this.label,
-    required this.controller,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controller,
-      readOnly: true,
-      decoration: InputDecoration(
-        labelText: label,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-      ),
-    );
-  }
-}
-
-class _PeripheralTile extends StatelessWidget {
-  final String label;
-  final bool value;
-  final ValueChanged<bool?> onChanged;
-
-  const _PeripheralTile({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return CheckboxListTile(
-      value: value,
-      onChanged: onChanged,
-      title: Text(label),
-      subtitle: Text(value ? 'Working fine' : 'Has a problem'),
-      controlAffinity: ListTileControlAffinity.trailing,
-      contentPadding: EdgeInsets.zero,
     );
   }
 }
@@ -1025,32 +1356,20 @@ class _ErrorScaffold extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: _nuDarkBlue,
-        title: const Text('PC REPORT', style: TextStyle(color: _nuWhite)),
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 16),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: onBack,
-                child: const Text('Go Back'),
-              ),
-            ],
-          ),
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      backgroundColor: _nuDarkBlue,
+      title: const Text('ERROR'),
+    ),
+    body: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
         ),
       ),
-    );
-  }
+    ),
+  );
 }
+//e
