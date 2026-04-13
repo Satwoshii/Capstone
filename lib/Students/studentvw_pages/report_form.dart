@@ -825,12 +825,6 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
                               controller: _commentCtrl,
                               maxLines: 4,
                               style: const TextStyle(fontSize: 14),
-                              validator: (v) {
-                                if ((v ?? '').trim().isEmpty) {
-                                  return 'Please describe the issue first.';
-                                }
-                                return null;
-                              },
                               decoration: InputDecoration(
                                 hintText:
                                 'Example: The keyboard is not responding...',

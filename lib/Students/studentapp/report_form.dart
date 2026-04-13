@@ -334,10 +334,8 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
       return;
     }
 
-    if (_commentCtrl.text.trim().isEmpty) {
-      _snack('Please describe the issue first.');
-      return;
-    }
+    // Comment is now optional
+    String userComment = _commentCtrl.text.trim();
 
     setState(() {
       _loadingAi = true;
@@ -354,7 +352,7 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
       pcCode: _pcCode!,
       lab: _lab!,
       pc: _pcLabel!,
-      comment: _commentCtrl.text.trim(),
+      comment: userComment.isEmpty ? 'No detailed description provided.' : userComment,
       peripherals: {
         'mouse': _mouseOk,
         'keyboard': _keyboardOk,
@@ -825,12 +823,6 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
                               controller: _commentCtrl,
                               maxLines: 4,
                               style: const TextStyle(fontSize: 14),
-                              validator: (v) {
-                                if ((v ?? '').trim().isEmpty) {
-                                  return 'Please describe the issue first.';
-                                }
-                                return null;
-                              },
                               decoration: InputDecoration(
                                 hintText:
                                 'Example: The keyboard is not responding...',
