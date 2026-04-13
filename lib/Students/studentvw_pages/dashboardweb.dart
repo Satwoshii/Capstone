@@ -153,7 +153,7 @@ class _DashboardPageState extends State<DashboardPage>
             ),
             _DrawerItem(
               icon: Icons.qr_code_scanner,
-              label: 'Scan / Enter Code',
+              label: 'Enter QR Code',
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(context,
