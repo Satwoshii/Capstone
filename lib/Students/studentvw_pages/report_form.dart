@@ -157,12 +157,17 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
 
       _pcCode = code;
 
-      if (!doc.exists) return;
+      if (!doc.exists) {
+        _pcCode = null; // Mark as null so UI shows error state
+        return;
+      }
 
       final data = doc.data()!;
       _lab = (data['lab'] ?? '').toString();
       _pcLabel = (data['pc'] ?? '').toString();
-    } catch (_) {}
+    } catch (_) {
+      _pcCode = null;
+    }
   }
 
   List<String> _getProblemList() {
@@ -334,10 +339,8 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
       return;
     }
 
-    if (_commentCtrl.text.trim().isEmpty) {
-      _snack('Please describe the issue first.');
-      return;
-    }
+    // Comment is now optional
+    String userComment = _commentCtrl.text.trim();
 
     setState(() {
       _loadingAi = true;
@@ -354,7 +357,7 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
       pcCode: _pcCode!,
       lab: _lab!,
       pc: _pcLabel!,
-      comment: _commentCtrl.text.trim(),
+      comment: userComment.isEmpty ? 'No detailed description provided.' : userComment,
       peripherals: {
         'mouse': _mouseOk,
         'keyboard': _keyboardOk,
@@ -556,16 +559,10 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
       );
     }
 
-    if (_pcCode == null || _pcCode!.isEmpty) {
+    if (_pcCode == null) {
       return _ErrorScaffold(
-        message: 'Invalid QR code or unique code.',
-        onBack: () => Navigator.pop(context),
-      );
-    }
-
-    if (_lab == null || _pcLabel == null) {
-      return _ErrorScaffold(
-        message: 'PC not found for code:\n$_pcCode',
+        message: 'PC Not Found. Please put a proper code',
+        isWrongCode: true,
         onBack: () => Navigator.pop(context),
       );
     }
@@ -1343,27 +1340,76 @@ class _MascotHelperCard extends StatelessWidget {
 class _ErrorScaffold extends StatelessWidget {
   final String message;
   final VoidCallback onBack;
+  final bool isWrongCode;
 
   const _ErrorScaffold({
     required this.message,
     required this.onBack,
+    this.isWrongCode = false,
   });
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      backgroundColor: _nuDarkBlue,
-      title: const Text('ERROR'),
-    ),
-    body: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Text(
-          message,
-          textAlign: TextAlign.center,
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF4F5F8),
+      appBar: AppBar(
+        backgroundColor: _nuDarkBlue,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: _nuGold, size: 18),
+          onPressed: onBack,
+        ),
+        title: const Text('PC REPORT',
+            style: TextStyle(color: _nuWhite, fontSize: 17,
+                fontWeight: FontWeight.w800, letterSpacing: 2)),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(3),
+          child: Container(height: 3, color: _nuGold),
         ),
       ),
-    ),
-  );
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80, height: 80,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFCEBEB),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.red, width: 2.5),
+                boxShadow: isWrongCode ? [
+                  BoxShadow(color: Colors.red.withOpacity(0.3), blurRadius: 15, spreadRadius: 2)
+                ] : null,
+              ),
+              child: const Icon(Icons.error_outline,
+                  color: Color(0xFFE24B4A), size: 40),
+            ),
+            const SizedBox(height: 24),
+            Text(message,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 18, color: isWrongCode ? Colors.red : Colors.black54,
+                    fontWeight: isWrongCode ? FontWeight.w800 : FontWeight.normal,
+                    height: 1.6)),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: onBack,
+              icon: const Icon(Icons.arrow_back, size: 16),
+              label: const Text('Go Back'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _nuDarkBlue,
+                foregroundColor: _nuGold,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 32, vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 //e

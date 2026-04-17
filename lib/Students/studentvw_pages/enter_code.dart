@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../studentvw_pages/report_form.dart';
 
@@ -17,10 +18,10 @@ class EnterCodePage extends StatefulWidget {
 class _EnterCodePageState extends State<EnterCodePage>
     with SingleTickerProviderStateMixin {
 
-  // ── ORIGINAL state — untouched ─────────────────────────────────────────────
   final codeController = TextEditingController();
+  String? _errorText;
+  bool _isChecking = false;
 
-  // ── Entrance animation ─────────────────────────────────────────────────────
   late AnimationController _fadeCtrl;
   late Animation<double>    _fadeAnim;
   late Animation<Offset>    _slideAnim;
@@ -44,42 +45,59 @@ class _EnterCodePageState extends State<EnterCodePage>
     super.dispose();
   }
 
-  // ── ALL ORIGINAL LOGIC — UNTOUCHED ────────────────────────────────────────
-  void submitCode() {
+  Future<void> submitCode() async {
     String code = codeController.text.trim();
 
     if (code.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Please enter a unique code'),
-          backgroundColor: _nuDarkBlue,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      );
+      setState(() => _errorText = 'Please enter a unique code');
       return;
     }
 
-    final uri = Uri.tryParse(code);
-    if (uri != null && uri.queryParameters.containsKey('code')) {
-      code = uri.queryParameters['code']!.trim();
-    }
+    setState(() {
+      _isChecking = true;
+      _errorText = null;
+    });
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => StudentReportFormPage(pcCode: code),
-      ),
-    );
+    try {
+      String actualCode = code;
+      final uri = Uri.tryParse(code);
+      if (uri != null && uri.queryParameters.containsKey('code')) {
+        actualCode = uri.queryParameters['code']!.trim();
+      }
+
+      // Verify if the PC exists in Firestore before navigating
+      final doc = await FirebaseFirestore.instance.collection('pcs').doc(actualCode).get();
+
+      if (!doc.exists) {
+        setState(() {
+          _errorText = 'PC Not Found. Please put a proper code';
+          _isChecking = false;
+        });
+        return;
+      }
+
+      if (!mounted) return;
+      setState(() => _isChecking = false);
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => StudentReportFormPage(pcCode: actualCode),
+        ),
+      );
+    } catch (e) {
+      setState(() {
+        _errorText = 'Connection error. Please try again.';
+        _isChecking = false;
+      });
+    }
   }
 
-  // ── Build ────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F5F8),
 
-      // ── AppBar ──────────────────────────────────────────────────────────────
       appBar: AppBar(
         backgroundColor: _nuDarkBlue,
         elevation: 0,
@@ -127,7 +145,6 @@ class _EnterCodePageState extends State<EnterCodePage>
         ),
       ),
 
-      // ── Body ────────────────────────────────────────────────────────────────
       body: FadeTransition(
         opacity: _fadeAnim,
         child: SlideTransition(
@@ -139,7 +156,6 @@ class _EnterCodePageState extends State<EnterCodePage>
                 mainAxisSize: MainAxisSize.min,
                 children: [
 
-                  // ── Icon badge ───────────────────────────────────────────
                   Container(
                     width: 80, height: 80,
                     decoration: BoxDecoration(
@@ -158,7 +174,6 @@ class _EnterCodePageState extends State<EnterCodePage>
 
                   const SizedBox(height: 20),
 
-                  // ── Title ────────────────────────────────────────────────
                   const Text('Enter Your PC Code',
                       style: TextStyle(
                           fontSize: 22, fontWeight: FontWeight.w800,
@@ -173,7 +188,6 @@ class _EnterCodePageState extends State<EnterCodePage>
 
                   const SizedBox(height: 32),
 
-                  // ── Input card ───────────────────────────────────────────
                   Container(
                     width: double.infinity,
                     constraints: const BoxConstraints(maxWidth: 440),
@@ -194,22 +208,21 @@ class _EnterCodePageState extends State<EnterCodePage>
                       mainAxisSize: MainAxisSize.min,
                       children: [
 
-                        // Field label
                         const Text('UNIQUE CODE',
                             style: TextStyle(
                                 fontSize: 11, fontWeight: FontWeight.w700,
                                 color: Colors.black45, letterSpacing: 0.8)),
                         const SizedBox(height: 8),
 
-                        // Text field
                         TextField(
                           controller: codeController,
-                          onSubmitted: (_) => submitCode(),
+                          onSubmitted: (_) => _isChecking ? null : submitCode(),
                           style: const TextStyle(
                               fontSize: 14, fontFamily: 'monospace',
                               letterSpacing: 0.5),
                           decoration: InputDecoration(
                             hintText: 'e.g. L201-PC1-A1B2',
+                            errorText: _errorText,
                             hintStyle: const TextStyle(
                                 color: Colors.black26,
                                 fontFamily: 'monospace',
@@ -231,36 +244,32 @@ class _EnterCodePageState extends State<EnterCodePage>
                               borderSide: const BorderSide(
                                   color: _nuDarkBlue, width: 1.5),
                             ),
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 14),
+                            errorBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: const BorderSide(color: Colors.red, width: 1.5),
+                            ),
+                            focusedErrorBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: const BorderSide(color: Colors.red, width: 2.0),
+                            ),
                           ),
                         ),
 
                         const SizedBox(height: 8),
 
-                        // Helper text
-                        Row(
-                          children: [
-                            Icon(Icons.info_outline,
-                                size: 13, color: Colors.black38),
-                            const SizedBox(width: 5),
-                            Text(
-                              'You can also paste the full QR scan URL',
-                              style: TextStyle(
-                                  fontSize: 11, color: Colors.black38),
-                            ),
-                          ],
-                        ),
-
+                        if (_errorText == null)
                         const SizedBox(height: 20),
 
-                        // Submit button
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
-                            onPressed: submitCode,
-                            icon: const Icon(Icons.send_outlined, size: 16),
-                            label: const Text('Submit'),
+                            onPressed: _isChecking ? null : submitCode,
+                            icon: _isChecking
+                                ? const SizedBox(
+                                    width: 16, height: 16,
+                                    child: CircularProgressIndicator(color: _nuGold, strokeWidth: 2))
+                                : const Icon(Icons.send_outlined, size: 16),
+                            label: Text(_isChecking ? 'Checking...' : 'Submit'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: _nuDarkBlue,
                               foregroundColor: _nuGold,
@@ -280,7 +289,6 @@ class _EnterCodePageState extends State<EnterCodePage>
 
                   const SizedBox(height: 24),
 
-                  // ── Tip card ─────────────────────────────────────────────
                   Container(
                     width: double.infinity,
                     constraints: const BoxConstraints(maxWidth: 440),
