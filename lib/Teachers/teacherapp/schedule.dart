@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart' as ex;
 import 'package:file_picker/file_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:universal_html/html.dart' as html;
@@ -85,6 +86,9 @@ class _SchedulePageState extends State<SchedulePage> {
     loadScheduleForRoom();
   }
 
+  String get teacherEmail =>
+      FirebaseAuth.instance.currentUser?.email?.trim() ?? 'unknown_teacher';
+
   String makeKey(String day, String timeSlot) => '${day}_$timeSlot';
 
   DateTime? parseTimeOnly(String value) {
@@ -129,6 +133,99 @@ class _SchedulePageState extends State<SchedulePage> {
     }
 
     return cellStart.isBefore(clsEnd) && cellEnd.isAfter(clsStart);
+  }
+
+  bool rangesConflict({
+    required String startA,
+    required String endA,
+    required String startB,
+    required String endB,
+  }) {
+    final aStart = parseTimeOnly(startA);
+    final aEnd = parseTimeOnly(endA);
+    final bStart = parseTimeOnly(startB);
+    final bEnd = parseTimeOnly(endB);
+
+    if (aStart == null || aEnd == null || bStart == null || bEnd == null) {
+      return false;
+    }
+
+    return aStart.isBefore(bEnd) && aEnd.isAfter(bStart);
+  }
+
+  Future<Map<String, dynamic>?> findConflict({
+    required String room,
+    required String day,
+    required String startTime,
+    required String endTime,
+    String? ignoreDocId,
+  }) async {
+    final query = await FirebaseFirestore.instance
+        .collection('schedules')
+        .where('room', isEqualTo: room)
+        .where('day', isEqualTo: day)
+        .get();
+
+    for (final doc in query.docs) {
+      if (ignoreDocId != null && doc.id == ignoreDocId) continue;
+
+      final data = doc.data();
+      final existingStart = (data['start_time'] ?? '').toString().trim();
+      final existingEnd = (data['end_time'] ?? '').toString().trim();
+
+      if (existingStart.isEmpty || existingEnd.isEmpty) continue;
+
+      final conflict = rangesConflict(
+        startA: startTime,
+        endA: endTime,
+        startB: existingStart,
+        endB: existingEnd,
+      );
+
+      if (conflict) {
+        return {
+          'docId': doc.id,
+          'teacher_email': (data['teacher_email'] ?? '').toString(),
+          'subject': (data['subject'] ?? '').toString(),
+          'section': (data['section'] ?? '').toString(),
+          'time_slot': (data['time_slot'] ?? '').toString(),
+          'room': (data['room'] ?? '').toString(),
+          'day': (data['day'] ?? '').toString(),
+        };
+      }
+    }
+
+    return null;
+  }
+
+  void showConflictMessage(Map<String, dynamic> conflict) {
+    final conflictTeacher = (conflict['teacher_email'] ?? 'another teacher').toString();
+    final conflictRoom = (conflict['room'] ?? selectedRoom).toString();
+    final conflictDay = (conflict['day'] ?? '').toString();
+    final conflictTime = (conflict['time_slot'] ?? '').toString();
+    final conflictSubject = (conflict['subject'] ?? '').toString();
+    final conflictSection = (conflict['section'] ?? '').toString();
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Schedule Conflict Detected'),
+        content: Text(
+          'Another teacher already has a schedule in Room $conflictRoom on '
+              '$conflictDay at $conflictTime'
+              '${conflictSubject.isNotEmpty ? '\nSubject: $conflictSubject' : ''}'
+              '${conflictSection.isNotEmpty ? '\nSection: $conflictSection' : ''}'
+              '\nTeacher: $conflictTeacher'
+              '\n\nKindly check if the room number, day, and time you are trying to add are correct.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> loadScheduleForRoom() async {
@@ -290,6 +387,7 @@ class _SchedulePageState extends State<SchedulePage> {
       final oldDocs = await FirebaseFirestore.instance
           .collection('schedules')
           .where('room', isEqualTo: selectedRoom)
+          .where('teacher_email', isEqualTo: teacherEmail)
           .get();
 
       final deleteBatch = FirebaseFirestore.instance.batch();
@@ -363,18 +461,36 @@ class _SchedulePageState extends State<SchedulePage> {
             'time_slot': '$startTime - $endTime',
             'subject': subject,
             'section': section,
+            'teacher_email': teacherEmail,
             'source_file': file.name,
             'created_at': FieldValue.serverTimestamp(),
           });
         }
       }
 
-      // Remove duplicates after parsing
       final unique = <String, Map<String, dynamic>>{};
       for (final entry in parsedEntries) {
         final key =
-            '${entry['room']}_${entry['day']}_${entry['start_time']}_${entry['end_time']}_${entry['subject']}_${entry['section']}';
+            '${entry['room']}_${entry['day']}_${entry['start_time']}_${entry['end_time']}_${entry['subject']}_${entry['section']}_${entry['teacher_email']}';
         unique[key] = entry;
+      }
+
+      for (final entry in unique.values) {
+        final conflict = await findConflict(
+          room: entry['room'].toString(),
+          day: entry['day'].toString(),
+          startTime: entry['start_time'].toString(),
+          endTime: entry['end_time'].toString(),
+        );
+
+        if (conflict != null) {
+          if (!mounted) return;
+          showConflictMessage(conflict);
+          setState(() {
+            isImporting = false;
+          });
+          return;
+        }
       }
 
       final saveBatch = FirebaseFirestore.instance.batch();
@@ -459,6 +575,7 @@ class _SchedulePageState extends State<SchedulePage> {
                     stream: FirebaseFirestore.instance
                         .collection('schedules')
                         .where('room', isEqualTo: selectedRoom)
+                        .where('teacher_email', isEqualTo: teacherEmail)
                         .snapshots(),
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) {
@@ -487,7 +604,9 @@ class _SchedulePageState extends State<SchedulePage> {
                           final timeSlot = (data['time_slot'] ?? '').toString();
 
                           return ListTile(
-                            title: Text('$subject ${section.isNotEmpty ? "- $section" : ""}'),
+                            title: Text(
+                              '$subject ${section.isNotEmpty ? "- $section" : ""}',
+                            ),
                             subtitle: Text('$day | $timeSlot'),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -611,6 +730,21 @@ class _SchedulePageState extends State<SchedulePage> {
 
                 if (start.isEmpty || end.isEmpty || subject.isEmpty) return;
 
+                final conflict = await findConflict(
+                  room: selectedRoom,
+                  day: selectedDay,
+                  startTime: start,
+                  endTime: end,
+                  ignoreDocId: docId,
+                );
+
+                if (conflict != null) {
+                  if (!mounted) return;
+                  Navigator.pop(context);
+                  showConflictMessage(conflict);
+                  return;
+                }
+
                 final data = {
                   'room': selectedRoom,
                   'day': selectedDay,
@@ -619,6 +753,7 @@ class _SchedulePageState extends State<SchedulePage> {
                   'time_slot': '$start - $end',
                   'subject': subject,
                   'section': section,
+                  'teacher_email': teacherEmail,
                   'source_file': docId == null ? 'manual_add' : 'manual_edit',
                   'created_at': FieldValue.serverTimestamp(),
                 };
