@@ -12,6 +12,9 @@ const Color _nuDarkBlue = Color(0xFF001A52);
 const Color _nuBlue     = Color(0xFF003087);
 const Color _nuGold     = Color(0xFFFFD700);
 const Color _nuWhite    = Color(0xFFF8F9FF);
+const Color _nuLightGray = Color(0xFFF3F4F6);
+const Color _nuDarkGray = Color(0xFF1F2937);
+const Color _errorRed = Color(0xFFE24B4A);
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -26,13 +29,11 @@ class _DashboardState extends State<Dashboard>
   final TextEditingController uniqueCodeController = TextEditingController();
   final FocusNode _codeFocus = FocusNode();
 
-  // true = red glow, false = normal
   bool _codeError = false;
 
   String userName  = 'Student';
   String userEmail = 'No email';
 
-  // Scan frame pulse animation
   late AnimationController _pulseCtrl;
   late Animation<double>   _pulseAnim;
 
@@ -65,7 +66,6 @@ class _DashboardState extends State<Dashboard>
     super.dispose();
   }
 
-  // ── ORIGINAL logic — ALL UNTOUCHED ──────────────────────────────────────────
   Future<void> _loadUserInfo() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString("token");
@@ -117,7 +117,6 @@ class _DashboardState extends State<Dashboard>
     });
   }
 
-  // Submits the inline code field — no dialog, error glows red instead
   void _submitCode() {
     String code = uniqueCodeController.text.trim();
 
@@ -126,7 +125,6 @@ class _DashboardState extends State<Dashboard>
       return;
     }
 
-    // Extract code from a pasted URL if needed (original parsePC logic preserved)
     final uri = Uri.tryParse(code);
     if (uri != null && uri.queryParameters.containsKey('code')) {
       code = uri.queryParameters['code']!.trim();
@@ -135,19 +133,91 @@ class _DashboardState extends State<Dashboard>
     final parsedCode = parsePC(code);
 
     if (parsedCode == null || parsedCode.isEmpty) {
-      // Bad code — glow red, don't navigate
       setState(() => _codeError = true);
       return;
     }
 
-    // Clear error and proceed
     setState(() => _codeError = false);
     uniqueCodeController.clear();
     _codeFocus.unfocus();
     navigateToReport(parsedCode);
   }
 
-  // ── Build ────────────────────────────────────────────────────────────────────
+  void _showInvalidQRDialog() {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                decoration: const BoxDecoration(
+                  color: _errorRed,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.error_outline, color: Colors.white, size: 22),
+                    SizedBox(width: 12),
+                    Text(
+                      'Invalid QR Code',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'This QR code is not recognized by the system. Please scan a valid NU Clark QR code.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    height: 1.6,
+                    color: _nuDarkGray,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 22),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      if (mounted) setState(() => scanLocked = false);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _nuDarkBlue,
+                      foregroundColor: _nuGold,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: const Text(
+                      'Try Again',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -157,7 +227,6 @@ class _DashboardState extends State<Dashboard>
       drawer: _buildDrawer(context),
       body: Stack(
         children: [
-
           // ── Camera feed ──────────────────────────────────────────────────────
           Positioned.fill(
             child: MobileScanner(
@@ -174,60 +243,7 @@ class _DashboardState extends State<Dashboard>
                     if (parsedCode != null) {
                       navigateToReport(parsedCode);
                     } else {
-                      showDialog(
-                        context: context,
-                        builder: (_) => Dialog(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFE24B4A),
-                                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                                ),
-                                child: const Row(
-                                  children: [
-                                    Icon(Icons.error_outline, color: Colors.white, size: 20),
-                                    SizedBox(width: 8),
-                                    Text('Invalid QR Code',
-                                        style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
-                                  ],
-                                ),
-                              ),
-                              const Padding(
-                                padding: EdgeInsets.all(22),
-                                child: Text(
-                                  'This QR code is not recognized by the system. Please scan a valid NU Clark QR code.',
-                                  style: TextStyle(fontSize: 14, height: 1.6, color: Color(0xFF374151)),
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(22, 0, 22, 18),
-                                child: SizedBox(
-                                  width: double.infinity,
-                                  child: ElevatedButton(
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                      if (mounted) setState(() => scanLocked = false);
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: _nuDarkBlue,
-                                      foregroundColor: _nuGold,
-                                      elevation: 0,
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                    ),
-                                    child: const Text('Try Again', style: TextStyle(fontWeight: FontWeight.w700)),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
+                      _showInvalidQRDialog();
                     }
                     break;
                   }
@@ -239,13 +255,17 @@ class _DashboardState extends State<Dashboard>
           // ── Top vignette ─────────────────────────────────────────────────────
           Positioned(
             top: 0, left: 0, right: 0,
-            height: size.height * 0.3,
+            height: size.height * 0.32,
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Colors.black.withOpacity(0.75), Colors.transparent],
+                  colors: [
+                    Colors.black.withOpacity(0.8),
+                    Colors.black.withOpacity(0.3),
+                    Colors.transparent,
+                  ],
                 ),
               ),
             ),
@@ -254,13 +274,17 @@ class _DashboardState extends State<Dashboard>
           // ── Bottom vignette ───────────────────────────────────────────────────
           Positioned(
             bottom: 0, left: 0, right: 0,
-            height: size.height * 0.38,
+            height: size.height * 0.42,
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.bottomCenter,
                   end: Alignment.topCenter,
-                  colors: [Colors.black.withOpacity(0.88), Colors.transparent],
+                  colors: [
+                    Colors.black.withOpacity(0.92),
+                    Colors.black.withOpacity(0.6),
+                    Colors.transparent,
+                  ],
                 ),
               ),
             ),
@@ -271,53 +295,86 @@ class _DashboardState extends State<Dashboard>
             top: 0, left: 0, right: 0,
             child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 child: Row(
                   children: [
-                    // Hamburger
+                    // Hamburger menu button
                     Builder(
                       builder: (ctx) => GestureDetector(
                         onTap: () => Scaffold.of(ctx).openDrawer(),
                         child: Container(
-                          width: 40, height: 40,
+                          width: 44, height: 44,
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.45),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.white.withOpacity(0.18)),
+                            color: Colors.black.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.2),
+                              width: 1,
+                            ),
                           ),
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              _line(18), const SizedBox(height: 4),
-                              _line(18), const SizedBox(height: 4),
-                              _line(12),
+                              _buildMenuLine(18),
+                              const SizedBox(height: 5),
+                              _buildMenuLine(18),
+                              const SizedBox(height: 5),
+                              _buildMenuLine(12),
                             ],
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    // Logo
+                    const SizedBox(width: 14),
+                    // Logo and title
                     Container(
-                      width: 34, height: 34,
+                      width: 38, height: 38,
                       decoration: BoxDecoration(
-                        shape: BoxShape.circle, color: Colors.white,
-                        border: Border.all(color: _nuGold, width: 1.5),
+                        shape: BoxShape.circle,
+                        color: Colors.white,
+                        border: Border.all(color: _nuGold, width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _nuGold.withOpacity(0.3),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                          ),
+                        ],
                       ),
                       child: ClipOval(
-                        child: Image.asset('assets/Images/NUSchoolLogo.png', fit: BoxFit.contain),
+                        child: Image.asset(
+                          'assets/Images/NUSchoolLogo.png',
+                          fit: BoxFit.contain,
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('QR SCANNER',
-                            style: TextStyle(color: _nuWhite, fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
-                        Text('NATIONAL UNIVERSITY CLARK',
-                            style: TextStyle(color: _nuGold.withOpacity(0.85), fontSize: 8, fontWeight: FontWeight.w500, letterSpacing: 1.5)),
-                      ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'QR SCANNER',
+                            style: TextStyle(
+                              color: _nuWhite,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'NATIONAL UNIVERSITY CLARK',
+                            style: TextStyle(
+                              color: _nuGold.withOpacity(0.8),
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -325,32 +382,42 @@ class _DashboardState extends State<Dashboard>
             ),
           ),
 
-          // ── Scan frame ───────────────────────────────────────────────────────
+          // ── Scan frame animation ──────────────────────────────────────────────
           Center(
-            child: AnimatedBuilder(
-              animation: _pulseAnim,
-              builder: (_, __) => SizedBox(
-                width: 260, height: 260,
-                child: CustomPaint(
-                  painter: _ScanFramePainter(opacity: _pulseAnim.value),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                AnimatedBuilder(
+                  animation: _pulseAnim,
+                  builder: (_, __) => SizedBox(
+                    width: 280, height: 280,
+                    child: CustomPaint(
+                      painter: _ScanFramePainter(opacity: _pulseAnim.value),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          ),
-
-          // ── Hint label ───────────────────────────────────────────────────────
-          Positioned(
-            bottom: 200, left: 0, right: 0,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.55),
-                  borderRadius: BorderRadius.circular(20),
+                const SizedBox(height: 32),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.1),
+                      width: 1,
+                    ),
+                  ),
+                  child: const Text(
+                    'Align QR code within the frame',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
                 ),
-                child: const Text('Align QR code within the frame',
-                    style: TextStyle(color: Colors.white, fontSize: 13, letterSpacing: 0.3)),
-              ),
+              ],
             ),
           ),
 
@@ -359,147 +426,84 @@ class _DashboardState extends State<Dashboard>
             bottom: 0, left: 0, right: 0,
             child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // User info pill
+                    // User info card
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(30),
-                        border: Border.all(color: Colors.white.withOpacity(0.15)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 28, height: 28,
-                            decoration: BoxDecoration(
-                              color: _nuGold.withOpacity(0.2),
-                              shape: BoxShape.circle,
-                              border: Border.all(color: _nuGold.withOpacity(0.5)),
-                            ),
-                            child: const Icon(Icons.person, color: _nuGold, size: 15),
-                          ),
-                          const SizedBox(width: 8),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(userName,
-                                  style: const TextStyle(color: _nuWhite, fontSize: 13, fontWeight: FontWeight.w600)),
-                              Text(userEmail,
-                                  style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 10)),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // ── Inline code entry (replaces dialog button) ──────
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
                         borderRadius: BorderRadius.circular(14),
-                        boxShadow: _codeError
-                            ? [
-                          BoxShadow(
-                            color: const Color(0xFFE24B4A).withOpacity(0.7),
-                            blurRadius: 16,
-                            spreadRadius: 2,
-                          ),
-                        ]
-                            : [
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.12),
+                          width: 1,
+                        ),
+                        boxShadow: [
                           BoxShadow(
                             color: Colors.black.withOpacity(0.3),
-                            blurRadius: 8,
+                            blurRadius: 12,
+                            spreadRadius: 0,
                           ),
                         ],
                       ),
-                      child: TextField(
-                        controller: uniqueCodeController,
-                        focusNode: _codeFocus,
-                        onChanged: (_) {
-                          if (_codeError) setState(() => _codeError = false);
-                        },
-                        onSubmitted: (_) => _submitCode(),
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: _codeError ? const Color(0xFFE24B4A) : Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Enter unique code…',
-                          hintStyle: TextStyle(
-                            color: _codeError
-                                ? const Color(0xFFE24B4A).withOpacity(0.6)
-                                : Colors.white38,
-                            fontSize: 14,
-                          ),
-                          prefixIcon: Icon(
-                            Icons.keyboard_outlined,
-                            size: 20,
-                            color: _codeError ? const Color(0xFFE24B4A) : _nuGold,
-                          ),
-                          suffixIcon: GestureDetector(
-                            onTap: _submitCode,
-                            child: Container(
-                              margin: const EdgeInsets.all(6),
-                              width: 36, height: 36,
-                              decoration: BoxDecoration(
-                                color: _codeError ? const Color(0xFFE24B4A) : _nuGold,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Icon(
-                                Icons.arrow_forward_rounded,
-                                size: 18,
-                                color: _codeError ? Colors.white : _nuDarkBlue,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40, height: 40,
+                            decoration: BoxDecoration(
+                              color: _nuGold.withOpacity(0.15),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: _nuGold.withOpacity(0.6),
+                                width: 1.5,
                               ),
                             ),
-                          ),
-                          filled: true,
-                          fillColor: _codeError
-                              ? const Color(0xFF2D0A09)
-                              : Colors.black.withOpacity(0.55),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(
-                              color: _codeError
-                                  ? const Color(0xFFE24B4A)
-                                  : Colors.white.withOpacity(0.15),
-                              width: 1.5,
+                            child: const Icon(
+                              Icons.person_rounded,
+                              color: _nuGold,
+                              size: 18,
                             ),
                           ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(
-                              color: _codeError
-                                  ? const Color(0xFFE24B4A)
-                                  : Colors.white.withOpacity(0.15),
-                              width: 1.5,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  userName,
+                                  style: const TextStyle(
+                                    color: _nuWhite,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.3,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  userEmail,
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.6),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
                             ),
                           ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(
-                              color: _codeError ? const Color(0xFFE24B4A) : _nuGold,
-                              width: 2,
-                            ),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 14),
-                          errorText: _codeError ? 'Invalid or unrecognized code' : null,
-                          errorStyle: const TextStyle(
-                            color: Color(0xFFE24B4A),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        ],
                       ),
                     ),
+                    const SizedBox(height: 16),
+
+                    // Code input field
+                    _buildCodeInputField(),
                   ],
                 ),
               ),
@@ -510,95 +514,257 @@ class _DashboardState extends State<Dashboard>
     );
   }
 
-  Widget _line(double width) => Container(
-    width: width, height: 2,
-    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2)),
+  Widget _buildCodeInputField() {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: _codeError
+                ? _errorRed.withOpacity(0.5)
+                : Colors.black.withOpacity(0.4),
+            blurRadius: _codeError ? 12 : 8,
+            spreadRadius: _codeError ? 1 : 0,
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: uniqueCodeController,
+        focusNode: _codeFocus,
+        onChanged: (_) {
+          if (_codeError) setState(() => _codeError = false);
+        },
+        onSubmitted: (_) => _submitCode(),
+        style: TextStyle(
+          fontSize: 15,
+          color: _codeError ? _errorRed : _nuWhite,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.3,
+        ),
+        decoration: InputDecoration(
+          hintText: 'Enter unique code…',
+          hintStyle: TextStyle(
+            color: _codeError
+                ? _errorRed.withOpacity(0.5)
+                : Colors.white.withOpacity(0.4),
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+          ),
+          prefixIcon: Icon(
+            Icons.keyboard_outlined,
+            size: 20,
+            color: _codeError ? _errorRed : _nuGold,
+          ),
+          suffixIcon: Padding(
+            padding: const EdgeInsets.all(6),
+            child: GestureDetector(
+              onTap: _submitCode,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _codeError ? _errorRed : _nuGold,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (_codeError ? _errorRed : _nuGold).withOpacity(0.4),
+                      blurRadius: 8,
+                      spreadRadius: 0,
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 20,
+                  color: _codeError ? Colors.white : _nuDarkBlue,
+                ),
+              ),
+            ),
+          ),
+          filled: true,
+          fillColor: _codeError
+              ? const Color(0xFF2D0A09)
+              : Colors.white.withOpacity(0.08),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(
+              color: _codeError
+                  ? _errorRed.withOpacity(0.7)
+                  : Colors.white.withOpacity(0.15),
+              width: 1.5,
+            ),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(
+              color: _codeError
+                  ? _errorRed.withOpacity(0.7)
+                  : Colors.white.withOpacity(0.15),
+              width: 1.5,
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(
+              color: _codeError ? _errorRed : _nuGold,
+              width: 2,
+            ),
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          errorText: _codeError ? 'Invalid or unrecognized code' : null,
+          errorStyle: const TextStyle(
+            color: _errorRed,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            height: 1.2,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenuLine(double width) => Container(
+    width: width,
+    height: 2.5,
+    decoration: BoxDecoration(
+      color: Colors.white.withOpacity(0.9),
+      borderRadius: BorderRadius.circular(1.5),
+    ),
   );
 
   // ── Drawer ──────────────────────────────────────────────────────────────────
   Widget _buildDrawer(BuildContext context) {
     return Drawer(
-      child: Column(
-        children: [
-          // Drawer header
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.only(
-              top: MediaQuery.of(context).padding.top + 24,
-              bottom: 24, left: 20, right: 20,
-            ),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF003087), Color(0xFF001A52)],
+      child: Material(
+        color: _nuWhite,
+        child: Column(
+          children: [
+            // Drawer header with gradient
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.only(
+                top: MediaQuery.of(context).padding.top + 28,
+                bottom: 28,
+                left: 24,
+                right: 24,
+              ),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [_nuBlue, _nuDarkBlue],
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 64, height: 64,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white,
+                      border: Border.all(color: _nuGold, width: 2.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _nuGold.withOpacity(0.3),
+                          blurRadius: 12,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/Images/NUSchoolLogo.png',
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    userName,
+                    style: const TextStyle(
+                      color: _nuWhite,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.3,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    userEmail,
+                    style: TextStyle(
+                      color: _nuGold.withOpacity(0.85),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.2,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: _nuGold.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: _nuGold.withOpacity(0.4),
+                        width: 1,
+                      ),
+                    ),
+                    child: const Text(
+                      'Student Account',
+                      style: TextStyle(
+                        color: _nuGold,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 60, height: 60,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle, color: Colors.white,
-                    border: Border.all(color: _nuGold, width: 2),
-                  ),
-                  child: ClipOval(
-                    child: Image.asset('assets/Images/NUSchoolLogo.png', fit: BoxFit.contain),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(userName,
-                    style: const TextStyle(color: _nuWhite, fontSize: 18, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 3),
-                Text(userEmail,
-                    style: TextStyle(color: _nuGold.withOpacity(0.8), fontSize: 13)),
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _nuGold.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _nuGold.withOpacity(0.35)),
-                  ),
-                  child: const Text('Student',
-                      style: TextStyle(color: _nuGold, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
-                ),
-              ],
+
+            // Divider
+            Container(
+              height: 3,
+              color: _nuGold,
             ),
-          ),
+            const SizedBox(height: 8),
 
-          Container(height: 3, color: _nuGold),
-          const SizedBox(height: 8),
+            // Menu items
+            _DrawerItem(
+              icon: Icons.dashboard_rounded,
+              label: 'Dashboard',
+              onTap: () => Navigator.pop(context),
+            ),
+            _DrawerItem(
+              icon: Icons.qr_code_2,
+              label: 'Scan / Enter Code',
+              onTap: () {
+                Navigator.pop(context);
+                Future.delayed(const Duration(milliseconds: 300), () {
+                  _codeFocus.requestFocus();
+                });
+              },
+            ),
 
-          _DrawerItem(
-            icon: Icons.dashboard_outlined,
-            label: 'Dashboard',
-            onTap: () => Navigator.pop(context),
-          ),
-          _DrawerItem(
-            icon: Icons.qr_code_scanner,
-            label: 'Scan / Enter Code',
-            onTap: () {
-              Navigator.pop(context);
-              // Focus the inline code field instead of opening a dialog
-              Future.delayed(const Duration(milliseconds: 300), () {
-                _codeFocus.requestFocus();
-              });
-            },
-          ),
+            const Spacer(),
 
-          const Spacer(),
-          const Divider(height: 1, color: Color(0xFFE5E7EB)),
+            // Divider
+            const Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
 
-          _DrawerItem(
-            icon: Icons.logout,
-            label: 'Logout',
-            isDestructive: true,
-            onTap: () => _logout(context),
-          ),
-          const SizedBox(height: 16),
-        ],
+            _DrawerItem(
+              icon: Icons.logout_rounded,
+              label: 'Logout',
+              isDestructive: true,
+              onTap: () => _logout(context),
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
       ),
     );
   }
@@ -611,15 +777,16 @@ class _ScanFramePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const cornerLen  = 28.0;
-    const strokeW    = 4.0;
-    const r          = 12.0;
+    const cornerLen  = 32.0;
+    const strokeW    = 3.5;
+    const r          = 14.0;
 
     final paint = Paint()
       ..color       = Color.fromRGBO(255, 215, 0, opacity)
       ..strokeWidth = strokeW
       ..style       = PaintingStyle.stroke
-      ..strokeCap   = StrokeCap.round;
+      ..strokeCap   = StrokeCap.round
+      ..strokeJoin  = StrokeJoin.round;
 
     final w = size.width;
     final h = size.height;
@@ -627,22 +794,52 @@ class _ScanFramePainter extends CustomPainter {
     // Top-left
     canvas.drawLine(const Offset(r, 0), const Offset(cornerLen, 0), paint);
     canvas.drawLine(const Offset(0, r), const Offset(0, cornerLen), paint);
-    canvas.drawArc(const Rect.fromLTWH(0, 0, r * 2, r * 2), 3.14159, 1.5708, false, paint);
+    canvas.drawArc(
+      const Rect.fromLTWH(0, 0, r * 2, r * 2),
+      3.14159,
+      1.5708,
+      false,
+      paint,
+    );
 
     // Top-right
     canvas.drawLine(Offset(w - cornerLen, 0), Offset(w - r, 0), paint);
     canvas.drawLine(Offset(w, r), Offset(w, cornerLen), paint);
-    canvas.drawArc(Rect.fromLTWH(w - r * 2, 0, r * 2, r * 2), -1.5708, 1.5708, false, paint);
+    canvas.drawArc(
+      Rect.fromLTWH(w - r * 2, 0, r * 2, r * 2),
+      -1.5708,
+      1.5708,
+      false,
+      paint,
+    );
 
     // Bottom-left
     canvas.drawLine(Offset(0, h - cornerLen), Offset(0, h - r), paint);
     canvas.drawLine(Offset(r, h), Offset(cornerLen, h), paint);
-    canvas.drawArc(Rect.fromLTWH(0, h - r * 2, r * 2, r * 2), 1.5708, 1.5708, false, paint);
+    canvas.drawArc(
+      Rect.fromLTWH(0, h - r * 2, r * 2, r * 2),
+      1.5708,
+      1.5708,
+      false,
+      paint,
+    );
 
     // Bottom-right
     canvas.drawLine(Offset(w, h - cornerLen), Offset(w, h - r), paint);
     canvas.drawLine(Offset(w - cornerLen, h), Offset(w - r, h), paint);
-    canvas.drawArc(Rect.fromLTWH(w - r * 2, h - r * 2, r * 2, r * 2), 0, 1.5708, false, paint);
+    canvas.drawArc(
+      Rect.fromLTWH(w - r * 2, h - r * 2, r * 2, r * 2),
+      0,
+      1.5708,
+      false,
+      paint,
+    );
+
+    // Optional: Draw center dot
+    final centerPaint = Paint()
+      ..color = Color.fromRGBO(255, 215, 0, opacity * 0.6)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(w / 2, h / 2), 3, centerPaint);
   }
 
   @override
@@ -650,38 +847,82 @@ class _ScanFramePainter extends CustomPainter {
 }
 
 // ── Drawer Item ───────────────────────────────────────────────────────────────
-class _DrawerItem extends StatelessWidget {
+class _DrawerItem extends StatefulWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final bool isDestructive;
 
   const _DrawerItem({
-    required this.icon, required this.label, required this.onTap,
+    required this.icon,
+    required this.label,
+    required this.onTap,
     this.isDestructive = false,
   });
 
   @override
+  State<_DrawerItem> createState() => _DrawerItemState();
+}
+
+class _DrawerItemState extends State<_DrawerItem> {
+  bool _isHovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    final fg = isDestructive ? const Color(0xFF791F1F) : const Color(0xFF374151);
-    final iconBg = isDestructive ? const Color(0xFFFCEBEB) : const Color(0xFFE8EEF8);
-    final iconColor = isDestructive ? const Color(0xFF791F1F) : _nuDarkBlue;
+    final iconBg = widget.isDestructive
+        ? const Color(0xFFFCEBEB)
+        : const Color(0xFFE8EEF8);
+    final iconColor = widget.isDestructive ? const Color(0xFFDC2626) : _nuDarkBlue;
+    final textColor =
+    widget.isDestructive ? const Color(0xDC2626) : _nuDarkGray;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      child: ListTile(
-        onTap: onTap,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        tileColor: isDestructive ? const Color(0xFFFCEBEB) : Colors.transparent,
-        leading: Container(
-          width: 36, height: 36,
-          decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(8)),
-          child: Icon(icon, size: 18, color: iconColor),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: BoxDecoration(
+            color: _isHovered
+                ? (widget.isDestructive ? const Color(0xFFFCEBEB) : const Color(0xFFE8EEF8))
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: ListTile(
+            onTap: widget.onTap,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            leading: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: iconBg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: iconColor.withOpacity(0.2),
+                  width: 1,
+                ),
+              ),
+              child: Icon(widget.icon, size: 20, color: iconColor),
+            ),
+            title: Text(
+              widget.label,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: textColor,
+                letterSpacing: 0.2,
+              ),
+            ),
+            trailing: Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 14,
+              color: textColor.withOpacity(0.3),
+            ),
+            dense: false,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
         ),
-        title: Text(label,
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: fg)),
-        dense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
       ),
     );
   }
