@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'report_form.dart';
+import '../studentvw_pages/report_form.dart';
 import 'login/screens/login_screen.dart';
 import 'login/services/jwt_service.dart';
 
@@ -24,6 +24,10 @@ class _DashboardState extends State<Dashboard>
     with SingleTickerProviderStateMixin {
   bool scanLocked = false;
   final TextEditingController uniqueCodeController = TextEditingController();
+  final FocusNode _codeFocus = FocusNode();
+
+  // true = red glow, false = normal
+  bool _codeError = false;
 
   String userName  = 'Student';
   String userEmail = 'No email';
@@ -57,6 +61,7 @@ class _DashboardState extends State<Dashboard>
   void dispose() {
     _pulseCtrl.dispose();
     uniqueCodeController.dispose();
+    _codeFocus.dispose();
     super.dispose();
   }
 
@@ -112,130 +117,34 @@ class _DashboardState extends State<Dashboard>
     });
   }
 
-  void _openUniqueCodeDialog() {
+  // Submits the inline code field — no dialog, error glows red instead
+  void _submitCode() {
+    String code = uniqueCodeController.text.trim();
+
+    if (code.isEmpty) {
+      setState(() => _codeError = true);
+      return;
+    }
+
+    // Extract code from a pasted URL if needed (original parsePC logic preserved)
+    final uri = Uri.tryParse(code);
+    if (uri != null && uri.queryParameters.containsKey('code')) {
+      code = uri.queryParameters['code']!.trim();
+    }
+
+    final parsedCode = parsePC(code);
+
+    if (parsedCode == null || parsedCode.isEmpty) {
+      // Bad code — glow red, don't navigate
+      setState(() => _codeError = true);
+      return;
+    }
+
+    // Clear error and proceed
+    setState(() => _codeError = false);
     uniqueCodeController.clear();
-    showDialog(
-      context: context,
-      builder: (dialogContext) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
-              decoration: const BoxDecoration(
-                color: _nuDarkBlue,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 32, height: 32,
-                    decoration: BoxDecoration(
-                      color: _nuGold.withOpacity(0.15),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: _nuGold.withOpacity(0.4)),
-                    ),
-                    child: const Icon(Icons.qr_code, color: _nuGold, size: 16),
-                  ),
-                  const SizedBox(width: 10),
-                  const Text('Enter Unique Code',
-                      style: TextStyle(color: _nuWhite, fontSize: 16, fontWeight: FontWeight.w700)),
-                ],
-              ),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.all(22),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Manually enter the QR code or paste the scan URL.',
-                      style: TextStyle(fontSize: 13, color: Colors.black54, height: 1.5)),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: uniqueCodeController,
-                    autofocus: true,
-                    style: const TextStyle(fontSize: 14),
-                    decoration: InputDecoration(
-                      hintText: 'Paste code or URL here…',
-                      hintStyle: const TextStyle(color: Colors.black26, fontSize: 13),
-                      prefixIcon: const Icon(Icons.key_outlined, size: 18, color: Colors.black38),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(color: Colors.black.withOpacity(0.12)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(color: Colors.black.withOpacity(0.12)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: _nuDarkBlue, width: 1.5),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.fromLTRB(22, 0, 22, 20),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(dialogContext),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: _nuDarkBlue,
-                        side: const BorderSide(color: Color(0xFFD1D5DB)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w600)),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        String code = uniqueCodeController.text.trim();
-                        if (code.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                            content: const Text('Please enter a unique code'),
-                            backgroundColor: _nuDarkBlue,
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ));
-                          return;
-                        }
-                        final uri = Uri.tryParse(code);
-                        if (uri != null && uri.queryParameters.containsKey('code')) {
-                          code = uri.queryParameters['code']!.trim();
-                        }
-                        Navigator.pop(dialogContext);
-                        navigateToReport(code);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _nuDarkBlue,
-                        foregroundColor: _nuGold,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      child: const Text('Proceed', style: TextStyle(fontWeight: FontWeight.w700)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    _codeFocus.unfocus();
+    navigateToReport(parsedCode);
   }
 
   // ── Build ────────────────────────────────────────────────────────────────────
@@ -490,20 +399,104 @@ class _DashboardState extends State<Dashboard>
                     ),
                     const SizedBox(height: 12),
 
-                    // Enter unique code button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton.icon(
-                        onPressed: _openUniqueCodeDialog,
-                        icon: const Icon(Icons.keyboard_outlined, size: 20),
-                        label: const Text('Enter Unique Code'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _nuGold,
-                          foregroundColor: _nuDarkBlue,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                    // ── Inline code entry (replaces dialog button) ──────
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: _codeError
+                            ? [
+                          BoxShadow(
+                            color: const Color(0xFFE24B4A).withOpacity(0.7),
+                            blurRadius: 16,
+                            spreadRadius: 2,
+                          ),
+                        ]
+                            : [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.3),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                      child: TextField(
+                        controller: uniqueCodeController,
+                        focusNode: _codeFocus,
+                        onChanged: (_) {
+                          if (_codeError) setState(() => _codeError = false);
+                        },
+                        onSubmitted: (_) => _submitCode(),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: _codeError ? const Color(0xFFE24B4A) : Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Enter unique code…',
+                          hintStyle: TextStyle(
+                            color: _codeError
+                                ? const Color(0xFFE24B4A).withOpacity(0.6)
+                                : Colors.white38,
+                            fontSize: 14,
+                          ),
+                          prefixIcon: Icon(
+                            Icons.keyboard_outlined,
+                            size: 20,
+                            color: _codeError ? const Color(0xFFE24B4A) : _nuGold,
+                          ),
+                          suffixIcon: GestureDetector(
+                            onTap: _submitCode,
+                            child: Container(
+                              margin: const EdgeInsets.all(6),
+                              width: 36, height: 36,
+                              decoration: BoxDecoration(
+                                color: _codeError ? const Color(0xFFE24B4A) : _nuGold,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(
+                                Icons.arrow_forward_rounded,
+                                size: 18,
+                                color: _codeError ? Colors.white : _nuDarkBlue,
+                              ),
+                            ),
+                          ),
+                          filled: true,
+                          fillColor: _codeError
+                              ? const Color(0xFF2D0A09)
+                              : Colors.black.withOpacity(0.55),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(
+                              color: _codeError
+                                  ? const Color(0xFFE24B4A)
+                                  : Colors.white.withOpacity(0.15),
+                              width: 1.5,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(
+                              color: _codeError
+                                  ? const Color(0xFFE24B4A)
+                                  : Colors.white.withOpacity(0.15),
+                              width: 1.5,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(
+                              color: _codeError ? const Color(0xFFE24B4A) : _nuGold,
+                              width: 2,
+                            ),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 14),
+                          errorText: _codeError ? 'Invalid or unrecognized code' : null,
+                          errorStyle: const TextStyle(
+                            color: Color(0xFFE24B4A),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
@@ -588,7 +581,10 @@ class _DashboardState extends State<Dashboard>
             label: 'Scan / Enter Code',
             onTap: () {
               Navigator.pop(context);
-              _openUniqueCodeDialog();
+              // Focus the inline code field instead of opening a dialog
+              Future.delayed(const Duration(milliseconds: 300), () {
+                _codeFocus.requestFocus();
+              });
             },
           ),
 
