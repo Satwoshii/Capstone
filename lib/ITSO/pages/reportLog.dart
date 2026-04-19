@@ -21,6 +21,32 @@ class _ReportLogPageState extends State<ReportLogPage> {
   final TextEditingController _searchCtrl = TextEditingController();
 
   String _statusFilter = 'all';
+  int? _selectedMonth;
+  int? _selectedYear;
+
+  static const List<String> _monthNames = [
+    '',
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _selectedMonth = now.month;
+    _selectedYear = now.year;
+  }
 
   @override
   void dispose() {
@@ -40,23 +66,53 @@ class _ReportLogPageState extends State<ReportLogPage> {
     return 'No date';
   }
 
+  DateTime? _extractDate(Map<String, dynamic> data) {
+    final candidates = [
+      data['timestamp'],
+      data['created_at'],
+      data['resolved_at'],
+      data['date'],
+    ];
+
+    for (final value in candidates) {
+      if (value is Timestamp) return value.toDate();
+      if (value is DateTime) return value;
+      if (value is String && value.trim().isNotEmpty) {
+        final parsed = DateTime.tryParse(value);
+        if (parsed != null) return parsed;
+      }
+    }
+    return null;
+  }
+
+  bool _matchesMonthYear(Map<String, dynamic> data) {
+    final date = _extractDate(data);
+    if (date == null) return _selectedMonth == null && _selectedYear == null;
+
+    if (_selectedMonth != null && date.month != _selectedMonth) return false;
+    if (_selectedYear != null && date.year != _selectedYear) return false;
+    return true;
+  }
+
   bool _matchesSearch(Map<String, dynamic> data, String query) {
     if (query.trim().isEmpty) return true;
     final q = query.toLowerCase().trim();
     return [
-      (data['lab']         ?? '').toString(),
-      (data['pc']          ?? '').toString(),
-      (data['pc_code']     ?? '').toString(),
-      (data['comment']     ?? '').toString(),
-      (data['status']      ?? '').toString(),
+      (data['lab'] ?? '').toString(),
+      (data['pc'] ?? '').toString(),
+      (data['pc_code'] ?? '').toString(),
+      (data['comment'] ?? '').toString(),
+      (data['status'] ?? '').toString(),
       (data['reported_by'] ?? '').toString(),
       (data['repaired_by'] ?? '').toString(),
-      (data['action_taken']?? '').toString(),
+      (data['action_taken'] ?? '').toString(),
       (data['final_report_text'] ?? '').toString(),
       (data['ai_attempt_summary'] ?? '').toString(),
       (data['ai_student_tip'] ?? '').toString(),
       (data['ai_itso_action'] ?? '').toString(),
-      ((data['ai_attempted_fix'] ?? false) == true ? 'yes true attempted fix' : 'no false no attempted fix'),
+      ((data['ai_attempted_fix'] ?? false) == true
+          ? 'yes true attempted fix'
+          : 'no false no attempted fix'),
     ].any((v) => v.toLowerCase().contains(q));
   }
 
@@ -70,6 +126,7 @@ class _ReportLogPageState extends State<ReportLogPage> {
       'status': newStatus,
       if (newStatus == 'resolved') 'resolved_at': FieldValue.serverTimestamp(),
     });
+
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -81,19 +138,37 @@ class _ReportLogPageState extends State<ReportLogPage> {
     );
   }
 
+  void _clearDateFilter() {
+    setState(() {
+      _selectedMonth = null;
+      _selectedYear = null;
+    });
+  }
+
+  List<int> _buildAvailableYears(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+    final years = <int>{};
+    for (final doc in docs) {
+      final date = _extractDate(doc.data());
+      if (date != null) years.add(date.year);
+    }
+    if (years.isEmpty) years.add(DateTime.now().year);
+    final list = years.toList()..sort((a, b) => b.compareTo(a));
+    return list;
+  }
+
   void _showDetails(BuildContext context, String docId, Map<String, dynamic> data) {
-    final status     = (data['status']      ?? 'unknown').toString();
-    final lab        = (data['lab']         ?? '').toString();
-    final pc         = (data['pc']          ?? '').toString();
-    final code       = (data['pc_code']     ?? '').toString();
-    final comment    = (data['comment']     ?? '').toString();
+    final status     = (data['status'] ?? 'unknown').toString();
+    final lab        = (data['lab'] ?? '').toString();
+    final pc         = (data['pc'] ?? '').toString();
+    final code       = (data['pc_code'] ?? '').toString();
+    final comment    = (data['comment'] ?? '').toString();
     final reportedBy = (data['reported_by'] ?? 'Unknown').toString();
     final repairedBy = (data['repaired_by'] ?? 'Not recorded').toString();
-    final actionTaken= (data['action_taken']?? 'No action recorded').toString();
+    final actionTaken = (data['action_taken'] ?? 'No action recorded').toString();
     final finalReportText = (data['final_report_text'] ?? '').toString();
     final aiAttemptSummary = (data['ai_attempt_summary'] ?? '').toString();
     final aiAttemptedFix = (data['ai_attempted_fix'] ?? false) == true;
-    final timestamp  = _formatDate(data['timestamp']);
+    final timestamp  = _formatDate(data['timestamp'] ?? data['created_at']);
     final resolvedAt = _formatDate(data['resolved_at']);
 
     showDialog(
@@ -106,7 +181,6 @@ class _ReportLogPageState extends State<ReportLogPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // ── Modal header
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
                 color: _nuDarkBlue,
@@ -115,15 +189,18 @@ class _ReportLogPageState extends State<ReportLogPage> {
                     const Expanded(
                       child: Text(
                         'Report Details',
-                        style: TextStyle(color: _nuWhite, fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+                        style: TextStyle(
+                          color: _nuWhite,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                        ),
                       ),
                     ),
                     _StatusBadge(status: status),
                   ],
                 ),
               ),
-
-              // ── Modal body
               Flexible(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(24),
@@ -131,17 +208,20 @@ class _ReportLogPageState extends State<ReportLogPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _DetailGrid(items: [
-                        _DetailItem('Lab',          lab),
-                        _DetailItem('PC',           pc),
-                        _DetailItem('Unique Code',  code),
-                        _DetailItem('Reported By',  reportedBy),
-                        _DetailItem('Repaired By',  repairedBy),
+                        _DetailItem('Lab', lab),
+                        _DetailItem('PC', pc),
+                        _DetailItem('Unique Code', code),
+                        _DetailItem('Reported By', reportedBy),
+                        _DetailItem('Repaired By', repairedBy),
                         _DetailItem('AI Attempted Fix', aiAttemptedFix ? 'Yes' : 'No'),
-                        _DetailItem('Date Reported',timestamp),
-                        _DetailItem('Date Resolved',resolvedAt),
+                        _DetailItem('Date Reported', timestamp),
+                        _DetailItem('Date Resolved', resolvedAt),
                       ]),
                       const SizedBox(height: 20),
-                      _DetailSection(label: 'Issue / Comment', text: comment.isEmpty ? 'No comment provided.' : comment),
+                      _DetailSection(
+                        label: 'Issue / Comment',
+                        text: comment.isEmpty ? 'No comment provided.' : comment,
+                      ),
                       const SizedBox(height: 14),
                       _DetailSection(
                         label: 'Final Report Text',
@@ -152,7 +232,9 @@ class _ReportLogPageState extends State<ReportLogPage> {
                       const SizedBox(height: 14),
                       _DetailSection(
                         label: 'AI Attempt Summary',
-                        text: aiAttemptSummary.isEmpty ? 'No AI attempt summary recorded.' : aiAttemptSummary,
+                        text: aiAttemptSummary.isEmpty
+                            ? 'No AI attempt summary recorded.'
+                            : aiAttemptSummary,
                       ),
                       const SizedBox(height: 14),
                       _DetailSection(label: 'Action Taken', text: actionTaken),
@@ -160,8 +242,6 @@ class _ReportLogPageState extends State<ReportLogPage> {
                   ),
                 ),
               ),
-
-              // ── Modal footer
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                 decoration: const BoxDecoration(
@@ -203,14 +283,42 @@ class _ReportLogPageState extends State<ReportLogPage> {
     );
   }
 
+  Widget _buildMonthFilterChips() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: List.generate(12, (index) {
+        final month = index + 1;
+        final active = _selectedMonth == month;
+        return GestureDetector(
+          onTap: () => setState(() => _selectedMonth = month),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: active ? _nuDarkBlue : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: active ? _nuDarkBlue : Colors.black12),
+            ),
+            child: Text(
+              _monthNames[month],
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: active ? _nuGold : Colors.black54,
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: const Color(0xFFF4F5F8),
       drawer: const ItsoDrawer(),
-
-      // ── AppBar ──────────────────────────────────────────────────────────────
       appBar: AppBar(
         backgroundColor: _nuDarkBlue,
         elevation: 0,
@@ -222,7 +330,8 @@ class _ReportLogPageState extends State<ReportLogPage> {
         title: Row(
           children: [
             Container(
-              width: 38, height: 38,
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: Colors.white,
@@ -242,11 +351,21 @@ class _ReportLogPageState extends State<ReportLogPage> {
               children: [
                 const Text(
                   'REPORT LOG',
-                  style: TextStyle(color: _nuWhite, fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 2),
+                  style: TextStyle(
+                    color: _nuWhite,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 2,
+                  ),
                 ),
                 Text(
                   'NATIONAL UNIVERSITY CLARK · ITSO',
-                  style: TextStyle(color: _nuGold.withOpacity(0.85), fontSize: 10, fontWeight: FontWeight.w500, letterSpacing: 2),
+                  style: TextStyle(
+                    color: _nuGold.withOpacity(0.85),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 2,
+                  ),
                 ),
               ],
             ),
@@ -265,14 +384,112 @@ class _ReportLogPageState extends State<ReportLogPage> {
           const SizedBox(width: 8),
         ],
       ),
-
-      // ── Body ────────────────────────────────────────────────────────────────
       body: Padding(
         padding: const EdgeInsets.all(28),
         child: Column(
           children: [
+            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance.collection('reports').snapshots(),
+              builder: (context, snapshot) {
+                final docs = snapshot.data?.docs.toList() ?? [];
+                final availableYears = _buildAvailableYears(docs);
 
-            // ── Toolbar ─────────────────────────────────────────────────────
+                if (_selectedYear != null && !availableYears.contains(_selectedYear)) {
+                  _selectedYear = availableYears.isNotEmpty ? availableYears.first : DateTime.now().year;
+                }
+
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.black.withOpacity(0.07)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Audit Report Search',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: _nuDarkBlue,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Click a month to show only reports from that month.',
+                        style: TextStyle(fontSize: 13, color: Colors.black54),
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 180,
+                            child: DropdownButtonFormField<int>(
+                              initialValue: _selectedYear,
+                              decoration: InputDecoration(
+                                labelText: 'Year',
+                                filled: true,
+                                fillColor: const Color(0xFFF4F5F8),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(color: Colors.black.withOpacity(0.08)),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(color: Colors.black.withOpacity(0.08)),
+                                ),
+                              ),
+                              items: availableYears
+                                  .map((year) => DropdownMenuItem<int>(
+                                value: year,
+                                child: Text(year.toString()),
+                              ))
+                                  .toList(),
+                              onChanged: (value) => setState(() => _selectedYear = value),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          OutlinedButton.icon(
+                            onPressed: _clearDateFilter,
+                            icon: const Icon(Icons.filter_alt_off_outlined, size: 18),
+                            label: const Text('Clear Month Filter'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _nuDarkBlue,
+                              side: const BorderSide(color: _nuDarkBlue),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+                            ),
+                          ),
+                          const Spacer(),
+                          if (_selectedMonth != null || _selectedYear != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFF7DB),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: _nuGold),
+                              ),
+                              child: Text(
+                                '${_selectedMonth == null ? 'All Months' : _monthNames[_selectedMonth!]} ${_selectedYear ?? ''}'.trim(),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: _nuDarkBlue,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      _buildMonthFilterChips(),
+                    ],
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 20),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               decoration: BoxDecoration(
@@ -282,7 +499,6 @@ class _ReportLogPageState extends State<ReportLogPage> {
               ),
               child: Row(
                 children: [
-                  // Search field
                   Expanded(
                     flex: 4,
                     child: Container(
@@ -298,7 +514,7 @@ class _ReportLogPageState extends State<ReportLogPage> {
                         style: const TextStyle(fontSize: 14),
                         decoration: InputDecoration(
                           hintText: 'Search lab, PC, code, comment…',
-                          hintStyle: TextStyle(color: Colors.black38, fontSize: 14),
+                          hintStyle: const TextStyle(color: Colors.black38, fontSize: 14),
                           prefixIcon: const Icon(Icons.search, size: 18, color: Colors.black38),
                           border: InputBorder.none,
                           contentPadding: const EdgeInsets.symmetric(vertical: 12),
@@ -306,29 +522,49 @@ class _ReportLogPageState extends State<ReportLogPage> {
                               ? null
                               : IconButton(
                             icon: const Icon(Icons.clear, size: 16),
-                            onPressed: () { _searchCtrl.clear(); setState(() {}); },
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              setState(() {});
+                            },
                           ),
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 16),
-
-                  // Status filter chips
-                  Text('Status:', style: TextStyle(fontSize: 13, color: Colors.black54, fontWeight: FontWeight.w500)),
+                  Text(
+                    'Status:',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.black54,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  _FilterChip(label: 'All',      value: 'all',      current: _statusFilter, onTap: (v) => setState(() => _statusFilter = v)),
+                  _FilterChip(
+                    label: 'All',
+                    value: 'all',
+                    current: _statusFilter,
+                    onTap: (v) => setState(() => _statusFilter = v),
+                  ),
                   const SizedBox(width: 6),
-                  _FilterChip(label: 'Pending',  value: 'pending',  current: _statusFilter, onTap: (v) => setState(() => _statusFilter = v)),
+                  _FilterChip(
+                    label: 'Pending',
+                    value: 'pending',
+                    current: _statusFilter,
+                    onTap: (v) => setState(() => _statusFilter = v),
+                  ),
                   const SizedBox(width: 6),
-                  _FilterChip(label: 'Resolved', value: 'resolved', current: _statusFilter, onTap: (v) => setState(() => _statusFilter = v)),
+                  _FilterChip(
+                    label: 'Resolved',
+                    value: 'resolved',
+                    current: _statusFilter,
+                    onTap: (v) => setState(() => _statusFilter = v),
+                  ),
                 ],
               ),
             ),
-
             const SizedBox(height: 20),
-
-            // ── Table ────────────────────────────────────────────────────────
             Expanded(
               child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: FirebaseFirestore.instance.collection('reports').snapshots(),
@@ -337,21 +573,23 @@ class _ReportLogPageState extends State<ReportLogPage> {
                     return Center(child: Text('Error: ${snapshot.error}'));
                   }
                   if (!snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator(color: _nuDarkBlue));
+                    return const Center(
+                      child: CircularProgressIndicator(color: _nuDarkBlue),
+                    );
                   }
 
                   final docs = snapshot.data!.docs.toList()
                     ..sort((a, b) {
-                      final aTs = a.data()['timestamp'];
-                      final bTs = b.data()['timestamp'];
-                      final aDate = aTs is Timestamp ? aTs.toDate() : DateTime(2000);
-                      final bDate = bTs is Timestamp ? bTs.toDate() : DateTime(2000);
+                      final aDate = _extractDate(a.data()) ?? DateTime(2000);
+                      final bDate = _extractDate(b.data()) ?? DateTime(2000);
                       return bDate.compareTo(aDate);
                     });
 
                   final filtered = docs.where((doc) {
                     final data = doc.data();
-                    return _matchesSearch(data, _searchCtrl.text) && _matchesStatus(data);
+                    return _matchesSearch(data, _searchCtrl.text) &&
+                        _matchesStatus(data) &&
+                        _matchesMonthYear(data);
                   }).toList();
 
                   if (filtered.isEmpty) {
@@ -359,9 +597,14 @@ class _ReportLogPageState extends State<ReportLogPage> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.inbox_outlined, size: 48, color: Colors.black26),
+                          const Icon(Icons.inbox_outlined, size: 48, color: Colors.black26),
                           const SizedBox(height: 12),
-                          const Text('No reports found.', style: TextStyle(color: Colors.black38, fontSize: 15)),
+                          Text(
+                            _selectedMonth == null && _selectedYear == null
+                                ? 'No reports found.'
+                                : 'No reports found for ${_selectedMonth == null ? 'selected filters' : _monthNames[_selectedMonth!]} ${_selectedYear ?? ''}.',
+                            style: const TextStyle(color: Colors.black38, fontSize: 15),
+                          ),
                         ],
                       ),
                     );
@@ -375,7 +618,6 @@ class _ReportLogPageState extends State<ReportLogPage> {
                     ),
                     child: Column(
                       children: [
-                        // ── Header row
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
                           decoration: const BoxDecoration(
@@ -395,36 +637,38 @@ class _ReportLogPageState extends State<ReportLogPage> {
                             ],
                           ),
                         ),
-
-                        // ── Data rows
                         Expanded(
                           child: ListView.separated(
                             itemCount: filtered.length,
-                            separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF3F4F6)),
+                            separatorBuilder: (_, __) =>
+                            const Divider(height: 1, color: Color(0xFFF3F4F6)),
                             itemBuilder: (context, index) {
-                              final doc    = filtered[index];
-                              final data   = doc.data();
-                              final lab    = (data['lab']      ?? '').toString();
-                              final pc     = (data['pc']       ?? '').toString();
-                              final code   = (data['pc_code']  ?? '').toString();
-                              final comment= (data['comment']  ?? '').toString();
-                              final finalReportText = (data['final_report_text'] ?? '').toString();
-                              final aiAttemptedFix = (data['ai_attempted_fix'] ?? false) == true;
-                              final status = (data['status']   ?? 'unknown').toString();
-                              final date   = _formatDate(data['timestamp']);
+                              final doc = filtered[index];
+                              final data = doc.data();
+                              final lab = (data['lab'] ?? '').toString();
+                              final pc = (data['pc'] ?? '').toString();
+                              final code = (data['pc_code'] ?? '').toString();
+                              final comment = (data['comment'] ?? '').toString();
+                              final finalReportText =
+                              (data['final_report_text'] ?? '').toString();
+                              final aiAttemptedFix =
+                                  (data['ai_attempted_fix'] ?? false) == true;
+                              final status = (data['status'] ?? 'unknown').toString();
+                              final date =
+                              _formatDate(data['timestamp'] ?? data['created_at']);
 
                               return _TableRow(
                                 key: ValueKey(doc.id),
-                                lab:     lab,
-                                pc:      pc,
-                                code:    code,
+                                lab: lab,
+                                pc: pc,
+                                code: code,
                                 comment: finalReportText.isEmpty
                                     ? (comment.isEmpty ? 'No comment' : comment)
                                     : finalReportText,
                                 aiAttemptedFix: aiAttemptedFix,
-                                status:  status,
-                                date:    date,
-                                onView:  () => _showDetails(context, doc.id, data),
+                                status: status,
+                                date: date,
+                                onView: () => _showDetails(context, doc.id, data),
                                 onResolve: status.toLowerCase() != 'resolved'
                                     ? () => _updateStatus(doc.id, 'resolved')
                                     : null,
@@ -432,8 +676,6 @@ class _ReportLogPageState extends State<ReportLogPage> {
                             },
                           ),
                         ),
-
-                        // ── Footer count
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                           decoration: const BoxDecoration(
@@ -445,7 +687,11 @@ class _ReportLogPageState extends State<ReportLogPage> {
                             children: [
                               Text(
                                 '${filtered.length} report${filtered.length != 1 ? 's' : ''}',
-                                style: const TextStyle(fontSize: 12, color: Colors.black45, fontWeight: FontWeight.w500),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.black45,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ],
                           ),
@@ -463,7 +709,6 @@ class _ReportLogPageState extends State<ReportLogPage> {
   }
 }
 
-// ── Table Row ─────────────────────────────────────────────────────────────────
 class _TableRow extends StatefulWidget {
   final String lab, pc, code, comment, status, date;
   final bool aiAttemptedFix;
@@ -472,9 +717,15 @@ class _TableRow extends StatefulWidget {
 
   const _TableRow({
     super.key,
-    required this.lab, required this.pc, required this.code,
-    required this.comment, required this.aiAttemptedFix, required this.status, required this.date,
-    required this.onView, this.onResolve,
+    required this.lab,
+    required this.pc,
+    required this.code,
+    required this.comment,
+    required this.aiAttemptedFix,
+    required this.status,
+    required this.date,
+    required this.onView,
+    this.onResolve,
   });
 
   @override
@@ -488,7 +739,7 @@ class _TableRowState extends State<_TableRow> {
   Widget build(BuildContext context) {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
-      onExit:  (_) => setState(() => _hovered = false),
+      onExit: (_) => setState(() => _hovered = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         color: _hovered ? const Color(0xFFF8FAFF) : Colors.white,
@@ -503,7 +754,11 @@ class _TableRowState extends State<_TableRow> {
                 padding: const EdgeInsets.only(right: 12),
                 child: Text(
                   widget.code,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: Color(0xFF374151)),
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 11,
+                    color: Color(0xFF374151),
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -520,24 +775,34 @@ class _TableRowState extends State<_TableRow> {
                       widget.comment,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 13, color: Color(0xFF111827), height: 1.35),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF111827),
+                        height: 1.35,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: widget.aiAttemptedFix ? const Color(0xFFEAF3DE) : const Color(0xFFF3F4F6),
+                        color: widget.aiAttemptedFix
+                            ? const Color(0xFFEAF3DE)
+                            : const Color(0xFFF3F4F6),
                         borderRadius: BorderRadius.circular(999),
                         border: Border.all(
-                          color: widget.aiAttemptedFix ? const Color(0xFF97C459) : const Color(0xFFD1D5DB),
+                          color: widget.aiAttemptedFix
+                              ? const Color(0xFF97C459)
+                              : const Color(0xFFD1D5DB),
                         ),
                       ),
                       child: Text(
-                        'AI attempted fix: ' + (widget.aiAttemptedFix ? 'Yes' : 'No'),
+                        'AI attempted fix: ${widget.aiAttemptedFix ? 'Yes' : 'No'}',
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
-                          color: widget.aiAttemptedFix ? const Color(0xFF27500A) : const Color(0xFF4B5563),
+                          color: widget.aiAttemptedFix
+                              ? const Color(0xFF27500A)
+                              : const Color(0xFF4B5563),
                         ),
                       ),
                     ),
@@ -580,23 +845,30 @@ class _TableRowState extends State<_TableRow> {
   }
 }
 
-// ── Status Badge ──────────────────────────────────────────────────────────────
 class _StatusBadge extends StatelessWidget {
   final String status;
   const _StatusBadge({required this.status});
 
   @override
   Widget build(BuildContext context) {
-    final isPending  = status.toLowerCase() == 'pending';
-    final isResolved = status.toLowerCase() == 'resolved';
-    final bg   = isPending  ? const Color(0xFFFAEEDA)
-        : isResolved ? const Color(0xFFEAF3DE)
+    final safeStatus = status.isEmpty ? 'unknown' : status;
+    final lower = safeStatus.toLowerCase();
+    final isPending = lower == 'pending';
+    final isResolved = lower == 'resolved';
+    final bg = isPending
+        ? const Color(0xFFFAEEDA)
+        : isResolved
+        ? const Color(0xFFEAF3DE)
         : const Color(0xFFF3F4F6);
-    final dot  = isPending  ? const Color(0xFFEF9F27)
-        : isResolved ? const Color(0xFF639922)
+    final dot = isPending
+        ? const Color(0xFFEF9F27)
+        : isResolved
+        ? const Color(0xFF639922)
         : Colors.grey;
-    final text = isPending  ? const Color(0xFF633806)
-        : isResolved ? const Color(0xFF27500A)
+    final text = isPending
+        ? const Color(0xFF633806)
+        : isResolved
+        ? const Color(0xFF27500A)
         : Colors.black54;
 
     return Container(
@@ -605,10 +877,14 @@ class _StatusBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(width: 6, height: 6, decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+          ),
           const SizedBox(width: 5),
           Text(
-            status[0].toUpperCase() + status.substring(1),
+            safeStatus[0].toUpperCase() + safeStatus.substring(1),
             style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: text),
           ),
         ],
@@ -617,14 +893,15 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-// ── Filter Chip ───────────────────────────────────────────────────────────────
 class _FilterChip extends StatelessWidget {
   final String label, value, current;
   final ValueChanged<String> onTap;
 
   const _FilterChip({
-    required this.label, required this.value,
-    required this.current, required this.onTap,
+    required this.label,
+    required this.value,
+    required this.current,
+    required this.onTap,
   });
 
   @override
@@ -632,13 +909,21 @@ class _FilterChip extends StatelessWidget {
     final active = current == value;
     Color bg, border, fg;
     if (!active) {
-      bg = Colors.white; border = Colors.black12; fg = Colors.black54;
+      bg = Colors.white;
+      border = Colors.black12;
+      fg = Colors.black54;
     } else if (value == 'all') {
-      bg = _nuDarkBlue; border = _nuDarkBlue; fg = Colors.white;
+      bg = _nuDarkBlue;
+      border = _nuDarkBlue;
+      fg = Colors.white;
     } else if (value == 'pending') {
-      bg = const Color(0xFFFAEEDA); border = const Color(0xFFEF9F27); fg = const Color(0xFF633806);
+      bg = const Color(0xFFFAEEDA);
+      border = const Color(0xFFEF9F27);
+      fg = const Color(0xFF633806);
     } else {
-      bg = const Color(0xFFEAF3DE); border = const Color(0xFF639922); fg = const Color(0xFF27500A);
+      bg = const Color(0xFFEAF3DE);
+      border = const Color(0xFF639922);
+      fg = const Color(0xFF27500A);
     }
 
     return GestureDetector(
@@ -653,19 +938,25 @@ class _FilterChip extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: border, width: 1.5),
           ),
-          child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
+          child: Text(
+            label,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg),
+          ),
         ),
       ),
     );
   }
 }
 
-// ── Row Button ────────────────────────────────────────────────────────────────
 class _RowButton extends StatefulWidget {
   final String label;
   final bool outlined;
   final VoidCallback onTap;
-  const _RowButton({required this.label, required this.outlined, required this.onTap});
+  const _RowButton({
+    required this.label,
+    required this.outlined,
+    required this.onTap,
+  });
 
   @override
   State<_RowButton> createState() => _RowButtonState();
@@ -678,7 +969,7 @@ class _RowButtonState extends State<_RowButton> {
   Widget build(BuildContext context) {
     return MouseRegion(
       onEnter: (_) => setState(() => _h = true),
-      onExit:  (_) => setState(() => _h = false),
+      onExit: (_) => setState(() => _h = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: widget.onTap,
@@ -688,7 +979,7 @@ class _RowButtonState extends State<_RowButton> {
           decoration: BoxDecoration(
             color: widget.outlined
                 ? (_h ? _nuDarkBlue : Colors.white.withOpacity(0))
-                : (_h ? _nuBlue    : _nuDarkBlue),
+                : (_h ? _nuBlue : _nuDarkBlue),
             borderRadius: BorderRadius.circular(6),
             border: Border.all(color: _nuDarkBlue, width: 1.5),
           ),
@@ -697,9 +988,7 @@ class _RowButtonState extends State<_RowButton> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: widget.outlined
-                  ? (_h ? _nuGold  : _nuDarkBlue)
-                  : _nuGold,
+              color: widget.outlined ? (_h ? _nuGold : _nuDarkBlue) : _nuGold,
             ),
           ),
         ),
@@ -708,7 +997,6 @@ class _RowButtonState extends State<_RowButton> {
   }
 }
 
-// ── Modal helpers ─────────────────────────────────────────────────────────────
 class _DetailGrid extends StatelessWidget {
   final List<_DetailItem> items;
   const _DetailGrid({required this.items});
@@ -718,18 +1006,28 @@ class _DetailGrid extends StatelessWidget {
     return Wrap(
       spacing: 24,
       runSpacing: 10,
-      children: items.map((item) => SizedBox(
-        width: 230,
-        child: RichText(
-          text: TextSpan(
-            style: const TextStyle(fontSize: 14, color: Color(0xFF374151)),
-            children: [
-              TextSpan(text: '${item.label}:  ', style: const TextStyle(fontWeight: FontWeight.w700, color: _nuDarkBlue)),
-              TextSpan(text: item.value.isEmpty ? '—' : item.value),
-            ],
+      children: items
+          .map(
+            (item) => SizedBox(
+          width: 230,
+          child: RichText(
+            text: TextSpan(
+              style: const TextStyle(fontSize: 14, color: Color(0xFF374151)),
+              children: [
+                TextSpan(
+                  text: '${item.label}:  ',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: _nuDarkBlue,
+                  ),
+                ),
+                TextSpan(text: item.value.isEmpty ? '—' : item.value),
+              ],
+            ),
           ),
         ),
-      )).toList(),
+      )
+          .toList(),
     );
   }
 }
@@ -750,7 +1048,12 @@ class _DetailSection extends StatelessWidget {
       children: [
         Text(
           label.toUpperCase(),
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.black45, letterSpacing: 0.8),
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: Colors.black45,
+            letterSpacing: 0.8,
+          ),
         ),
         const SizedBox(height: 6),
         Container(
@@ -760,7 +1063,14 @@ class _DetailSection extends StatelessWidget {
             color: const Color(0xFFF4F5F8),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Text(text, style: const TextStyle(fontSize: 14, color: Color(0xFF374151), height: 1.6)),
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 14,
+              color: Color(0xFF374151),
+              height: 1.6,
+            ),
+          ),
         ),
       ],
     );
@@ -810,7 +1120,6 @@ class _ModalPrimaryButton extends StatelessWidget {
   }
 }
 
-// ── Table cell helpers ────────────────────────────────────────────────────────
 class _HeaderCell extends StatelessWidget {
   final int flex;
   final String text;
@@ -822,7 +1131,12 @@ class _HeaderCell extends StatelessWidget {
       flex: flex,
       child: Text(
         text,
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.black45, letterSpacing: 0.8),
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: Colors.black45,
+          letterSpacing: 0.8,
+        ),
       ),
     );
   }
@@ -832,7 +1146,11 @@ class _BodyCell extends StatelessWidget {
   final int flex;
   final String text;
   final int maxLines;
-  const _BodyCell({required this.flex, required this.text, this.maxLines = 1});
+  const _BodyCell({
+    required this.flex,
+    required this.text,
+    this.maxLines = 1,
+  });
 
   @override
   Widget build(BuildContext context) {
