@@ -4,9 +4,23 @@ import 'package:bcrypt/bcrypt.dart';
 class AuthService {
   final users = FirebaseFirestore.instance.collection("users");
 
-  Future<void> register(String fullName, String email, String password) async {
+  Future<void> register(
+      String fullName,
+      String section,
+      String email,
+      String password,
+      ) async {
     final normalizedEmail = email.trim().toLowerCase();
     final normalizedName = fullName.trim();
+    final normalizedSection = section.trim().toUpperCase();
+
+    if (normalizedName.isEmpty) {
+      throw "Full name is required.";
+    }
+
+    if (normalizedSection.isEmpty) {
+      throw "Section is required.";
+    }
 
     final existingUser =
     await users.where("email", isEqualTo: normalizedEmail).get();
@@ -24,6 +38,7 @@ class AuthService {
       "full_name": normalizedName,
       "name": normalizedName,
       "email": normalizedEmail,
+      "section": normalizedSection,
       "password": hashedPassword,
       "role": "student",
       "createdAt": FieldValue.serverTimestamp(),
@@ -32,9 +47,7 @@ class AuthService {
 
   Future<Map<String, dynamic>?> login(String email, String password) async {
     final normalizedEmail = email.trim().toLowerCase();
-
-    final result =
-    await users.where("email", isEqualTo: normalizedEmail).get();
+    final result = await users.where("email", isEqualTo: normalizedEmail).get();
 
     if (result.docs.isEmpty) {
       return null;
@@ -44,14 +57,14 @@ class AuthService {
     final user = doc.data();
 
     if (BCrypt.checkpw(password, user["password"])) {
-      final fullName =
-      (user["full_name"] ?? user["name"] ?? "Student").toString();
+      final fullName = (user["full_name"] ?? user["name"] ?? "Student").toString();
 
       return {
         "uid": doc.id,
         "email": user["email"],
         "full_name": fullName,
         "name": fullName,
+        "section": (user["section"] ?? "").toString(),
         "role": user["role"] ?? "student",
       };
     }
