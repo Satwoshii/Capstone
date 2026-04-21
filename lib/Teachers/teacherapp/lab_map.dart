@@ -17,8 +17,11 @@ class LabMapPage extends StatefulWidget {
 }
 
 class _LabMapPageState extends State<LabMapPage> {
-  final List<String> rooms = ['706', '707', '708', '709', '710', '723'];
+  static const List<String> _defaultRooms = ['706', '707', '708', '709', '710', '722'];
+
+  List<String> rooms = List<String>.from(_defaultRooms);
   String selectedRoom = '706';
+  bool isLoadingRooms = true;
 
   String? selectedPc;
   Map<String, dynamic>? selectedPcData;
@@ -39,12 +42,12 @@ class _LabMapPageState extends State<LabMapPage> {
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _attendanceSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _pcsSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _scheduleSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _roomsSub;
 
   @override
   void initState() {
     super.initState();
-    refreshAll();
-    _listenToRealtimeUpdates();
+    _initializePage();
     refreshTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
       await refreshAll();
     });
@@ -56,10 +59,167 @@ class _LabMapPageState extends State<LabMapPage> {
     _attendanceSub?.cancel();
     _pcsSub?.cancel();
     _scheduleSub?.cancel();
+    _roomsSub?.cancel();
     super.dispose();
   }
 
+  Future<void> _initializePage() async {
+    await loadRoomsFromFirestore();
+    _listenToRoomUpdates();
+
+    if (selectedRoom.isNotEmpty) {
+      await refreshAll();
+      _listenToRealtimeUpdates();
+    }
+  }
+
+  void _resetSelectedPcState() {
+    selectedPc = null;
+    selectedPcData = null;
+    selectedPcDocId = null;
+    docsByPc.clear();
+    attendanceByPc.clear();
+    hasOngoingClass = false;
+    currentSubject = '';
+    currentSection = '';
+    currentTimeSlot = '';
+    currentStartTime = '';
+    currentEndTime = '';
+  }
+
+  String _normalizeRoomValue(String raw) {
+    String value = raw.trim().toUpperCase();
+    if (value.isEmpty) return '';
+
+    if (value.startsWith('ROOM ')) {
+      value = value.substring(5).trim();
+    }
+
+    return value;
+  }
+
+  Future<List<String>> _loadRoomsFromRoomsCollection() async {
+    final snapshot = await FirebaseFirestore.instance.collection('rooms').get();
+    final Set<String> foundRooms = {};
+
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      final candidates = <String>[
+        (data['room'] ?? '').toString(),
+        (data['lab'] ?? '').toString(),
+        (data['room_number'] ?? '').toString(),
+        (data['name'] ?? '').toString(),
+        doc.id,
+      ];
+
+      for (final candidate in candidates) {
+        final normalized = _normalizeRoomValue(candidate);
+        if (normalized.isNotEmpty) {
+          foundRooms.add(normalized);
+          break;
+        }
+      }
+    }
+
+    final result = foundRooms.toList()..sort();
+    return result;
+  }
+
+  Future<List<String>> _loadRoomsFromPcsCollection() async {
+    final snapshot = await FirebaseFirestore.instance.collection('pcs').get();
+    final Set<String> foundRooms = {};
+
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      final lab = _normalizeRoomValue((data['lab'] ?? '').toString());
+      if (lab.isNotEmpty) {
+        foundRooms.add(lab);
+      }
+    }
+
+    final result = foundRooms.toList()..sort();
+    return result;
+  }
+
+  Future<void> loadRoomsFromFirestore() async {
+    if (mounted) {
+      setState(() => isLoadingRooms = true);
+    }
+
+    try {
+      List<String> firestoreRooms = await _loadRoomsFromRoomsCollection();
+
+      if (firestoreRooms.isEmpty) {
+        firestoreRooms = await _loadRoomsFromPcsCollection();
+      }
+
+      final mergedRooms = <String>{
+        ..._defaultRooms.map(_normalizeRoomValue),
+        ...firestoreRooms.map(_normalizeRoomValue),
+      }.where((room) => room.isNotEmpty).toList()
+        ..sort((a, b) {
+          final aNum = int.tryParse(a);
+          final bNum = int.tryParse(b);
+          if (aNum != null && bNum != null) {
+            return aNum.compareTo(bNum);
+          }
+          return a.compareTo(b);
+        });
+
+      if (!mounted) return;
+
+      setState(() {
+        rooms = mergedRooms;
+
+        if (rooms.isEmpty) {
+          selectedRoom = '';
+          _resetSelectedPcState();
+        } else if (!rooms.contains(selectedRoom)) {
+          selectedRoom = rooms.first;
+          _resetSelectedPcState();
+        }
+      });
+    } catch (e) {
+      debugPrint('Failed to load rooms: $e');
+      if (!mounted) return;
+      setState(() {
+        rooms = List<String>.from(_defaultRooms);
+        if (!rooms.contains(selectedRoom)) {
+          selectedRoom = rooms.first;
+          _resetSelectedPcState();
+        }
+      });
+    } finally {
+      if (mounted) {
+        setState(() => isLoadingRooms = false);
+      }
+    }
+  }
+
+  void _listenToRoomUpdates() {
+    _roomsSub?.cancel();
+
+    _roomsSub = FirebaseFirestore.instance
+        .collection('rooms')
+        .snapshots()
+        .listen((_) async {
+      final previousRoom = selectedRoom;
+      await loadRoomsFromFirestore();
+
+      if (!mounted) return;
+
+      if (selectedRoom.isNotEmpty &&
+          (previousRoom != selectedRoom || docsByPc.isEmpty)) {
+        await refreshAll();
+        _listenToRealtimeUpdates();
+      }
+    }, onError: (_) async {
+      await loadRoomsFromFirestore();
+    });
+  }
+
   Future<void> refreshAll() async {
+    if (selectedRoom.isEmpty) return;
     await loadPcsForSelectedRoom();
     await loadCurrentScheduleForRoom();
     await loadTodayAttendanceForRoom();
@@ -69,6 +229,8 @@ class _LabMapPageState extends State<LabMapPage> {
     _attendanceSub?.cancel();
     _pcsSub?.cancel();
     _scheduleSub?.cancel();
+
+    if (selectedRoom.isEmpty) return;
 
     final today = DateTime.now().toString().split(' ')[0];
     final currentDay = getCurrentDayName();
@@ -98,6 +260,7 @@ class _LabMapPageState extends State<LabMapPage> {
         .snapshots()
         .listen((_) async {
       await loadPcsForSelectedRoom();
+      await loadRoomsFromFirestore();
       if (!mounted) return;
       if (selectedPc != null) {
         final selected = docsByPc[selectedPc!.toUpperCase()];
@@ -208,7 +371,7 @@ class _LabMapPageState extends State<LabMapPage> {
     final currentDay = getCurrentDayName();
     final now = DateTime.now();
 
-    if (currentDay.isEmpty) {
+    if (selectedRoom.isEmpty || currentDay.isEmpty) {
       if (!mounted) return;
       setState(() {
         currentSubject = '';
@@ -234,7 +397,8 @@ class _LabMapPageState extends State<LabMapPage> {
         final data = doc.data();
         final start =
         parseTimeForToday((data['start_time'] ?? '').toString().trim());
-        final end = parseTimeForToday((data['end_time'] ?? '').toString().trim());
+        final end =
+        parseTimeForToday((data['end_time'] ?? '').toString().trim());
 
         if (start == null || end == null) continue;
 
@@ -273,6 +437,8 @@ class _LabMapPageState extends State<LabMapPage> {
   }
 
   Future<void> loadTodayAttendanceForRoom() async {
+    if (selectedRoom.isEmpty) return;
+
     final today = DateTime.now().toString().split(' ')[0];
 
     try {
@@ -310,6 +476,8 @@ class _LabMapPageState extends State<LabMapPage> {
   }
 
   Future<void> loadPcsForSelectedRoom() async {
+    if (selectedRoom.isEmpty) return;
+
     final allDocs = await FirebaseFirestore.instance.collection('pcs').get();
     final Map<String, Map<String, dynamic>> mapped = {};
 
@@ -417,8 +585,7 @@ class _LabMapPageState extends State<LabMapPage> {
           ),
           backgroundColor: _nuDarkBlue,
           behavior: SnackBarBehavior.floating,
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       );
       return;
@@ -667,9 +834,28 @@ class _LabMapPageState extends State<LabMapPage> {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: _nuGold.withOpacity(0.3)),
             ),
-            child: DropdownButtonHideUnderline(
+            child: isLoadingRooms
+                ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: _nuGold,
+              ),
+            )
+                : DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: selectedRoom,
+                value: selectedRoom.isNotEmpty && rooms.contains(selectedRoom)
+                    ? selectedRoom
+                    : null,
+                hint: const Text(
+                  'No rooms',
+                  style: TextStyle(
+                    color: _nuGold,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
                 dropdownColor: _nuDarkBlue,
                 style: const TextStyle(
                   color: _nuGold,
@@ -689,16 +875,13 @@ class _LabMapPageState extends State<LabMapPage> {
                   ),
                 )
                     .toList(),
-                onChanged: (value) async {
-                  if (value == null) return;
+                onChanged: rooms.isEmpty
+                    ? null
+                    : (value) async {
+                  if (value == null || value == selectedRoom) return;
                   setState(() {
                     selectedRoom = value;
-                    selectedPc = null;
-                    selectedPcData = null;
-                    selectedPcDocId = null;
-                    docsByPc.clear();
-                    attendanceByPc.clear();
-                    hasOngoingClass = false;
+                    _resetSelectedPcState();
                   });
                   await refreshAll();
                   _listenToRealtimeUpdates();
@@ -827,7 +1010,7 @@ class _LabMapPageState extends State<LabMapPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Room $selectedRoom',
+            selectedRoom.isEmpty ? 'No room selected' : 'Room $selectedRoom',
             style: const TextStyle(
               color: Colors.white70,
               fontSize: 13,
@@ -952,17 +1135,10 @@ class _LabMapPageState extends State<LabMapPage> {
     );
   }
 
-  // ── Center Grid ──────────────────────────────────────────────────────────────
-  // Layout mirrors the reference image:
-  //   Left cluster : PC1–PC5 / PC11–PC15 / PC21–PC25 / PC31–PC35  (rows 1-4, cols 1-5)
-  //   Right cluster: PC6–PC10 / PC16–PC20 / PC26–PC30 / PC36–PC40 (rows 1-4, cols 6-10)
-  // The two clusters are separated by a visible aisle gap.
-
   Widget _buildCenterGrid() {
     return Expanded(
       child: Column(
         children: [
-          // ── Header bar ──
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             decoration: BoxDecoration(
@@ -990,8 +1166,6 @@ class _LabMapPageState extends State<LabMapPage> {
               ],
             ),
           ),
-
-          // ── Two-cluster grid ──
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
@@ -1005,15 +1179,7 @@ class _LabMapPageState extends State<LabMapPage> {
     );
   }
 
-  /// Builds the two side-by-side 5×4 clusters that match the reference image.
-  ///
-  /// Cluster A (left)  → PC1-5, PC11-15, PC21-25, PC31-35
-  /// Cluster B (right) → PC6-10, PC16-20, PC26-30, PC36-40
   Widget _buildTwoClusterLayout() {
-    // Each cluster has 4 rows × 5 columns
-    // Row r, col c (0-indexed) → PC number:
-    //   Cluster A: (r * 10) + c + 1
-    //   Cluster B: (r * 10) + c + 6
     const int rows = 4;
     const int cols = 5;
 
@@ -1046,13 +1212,8 @@ class _LabMapPageState extends State<LabMapPage> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Left cluster: PC1-5, 11-15, 21-25, 31-35
         buildCluster((r, c) => r * 10 + c + 1),
-
-        // Aisle gap
         const SizedBox(width: 40),
-
-        // Right cluster: PC6-10, 16-20, 26-30, 36-40
         buildCluster((r, c) => r * 10 + c + 6),
       ],
     );
@@ -1184,7 +1345,9 @@ class _LabMapPageState extends State<LabMapPage> {
           ),
         ),
         Text(
-          'ROOM $selectedRoom · WORKSTATION',
+          selectedRoom.isEmpty
+              ? 'NO ROOM SELECTED · WORKSTATION'
+              : 'ROOM $selectedRoom · WORKSTATION',
           style: const TextStyle(
             fontSize: 10,
             fontWeight: FontWeight.w700,

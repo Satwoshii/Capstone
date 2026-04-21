@@ -1,5 +1,5 @@
+import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart' as ex;
@@ -46,7 +46,11 @@ class _SchedulePageState extends State<SchedulePage>
   late AnimationController _fadeCtrl;
   late Animation<double> _fadeAnim;
 
-  final List<String> rooms = ['706', '707', '708', '709', '710', '723'];
+  final List<String> defaultRooms = ['706', '707', '708', '709', '710', '722'];
+  List<String> rooms = ['706', '707', '708', '709', '710', '722'];
+  bool isLoadingRooms = false;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _roomsSub;
+
   final List<String> days = [
     'Monday',
     'Tuesday',
@@ -118,11 +122,12 @@ class _SchedulePageState extends State<SchedulePage>
       duration: const Duration(milliseconds: 500),
     );
     _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
-    loadScheduleForRoom();
+    _initializeRoomsAndSchedule();
   }
 
   @override
   void dispose() {
+    _roomsSub?.cancel();
     _fadeCtrl.dispose();
     super.dispose();
   }
@@ -137,6 +142,129 @@ class _SchedulePageState extends State<SchedulePage>
     final s = (sectionNumber ?? '').trim();
     if (c.isEmpty || s.isEmpty) return '';
     return '$c$s';
+  }
+
+  String _normalizeRoomValue(String raw) {
+    String value = raw.trim().toUpperCase();
+    if (value.isEmpty) return '';
+
+    if (value.startsWith('ROOM ')) {
+      value = value.substring(5).trim();
+    }
+
+    return value;
+  }
+
+  Future<List<String>> _loadRoomsFromRoomsCollection() async {
+    final snapshot = await FirebaseFirestore.instance.collection('rooms').get();
+    final Set<String> foundRooms = {};
+
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      final candidates = <String>[
+        (data['room'] ?? '').toString(),
+        (data['lab'] ?? '').toString(),
+        (data['room_number'] ?? '').toString(),
+        (data['name'] ?? '').toString(),
+        doc.id,
+      ];
+
+      for (final candidate in candidates) {
+        final normalized = _normalizeRoomValue(candidate);
+        if (normalized.isNotEmpty) {
+          foundRooms.add(normalized);
+          break;
+        }
+      }
+    }
+
+    return foundRooms.toList()..sort();
+  }
+
+  Future<List<String>> _loadRoomsFromPcsCollection() async {
+    final snapshot = await FirebaseFirestore.instance.collection('pcs').get();
+    final Set<String> foundRooms = {};
+
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      final lab = _normalizeRoomValue((data['lab'] ?? '').toString());
+      if (lab.isNotEmpty) {
+        foundRooms.add(lab);
+      }
+    }
+
+    return foundRooms.toList()..sort();
+  }
+
+  Future<void> loadRoomsFromFirestore() async {
+    if (mounted) {
+      setState(() => isLoadingRooms = true);
+    }
+
+    try {
+      final Set<String> mergedRooms = {...defaultRooms};
+
+      final firestoreRooms = await _loadRoomsFromRoomsCollection();
+      mergedRooms.addAll(firestoreRooms);
+
+      if (firestoreRooms.isEmpty) {
+        mergedRooms.addAll(await _loadRoomsFromPcsCollection());
+      }
+
+      final sortedRooms = mergedRooms.toList()..sort();
+
+      if (!mounted) return;
+      setState(() {
+        rooms = sortedRooms;
+        if (rooms.isEmpty) {
+          selectedRoom = '';
+        } else if (!rooms.contains(selectedRoom)) {
+          selectedRoom = defaultRooms.contains('706') && rooms.contains('706')
+              ? '706'
+              : rooms.first;
+        }
+      });
+    } catch (e) {
+      debugPrint('Failed to load schedule rooms: $e');
+      if (!mounted) return;
+      setState(() {
+        rooms = [...defaultRooms];
+        if (!rooms.contains(selectedRoom)) {
+          selectedRoom = rooms.first;
+        }
+      });
+    } finally {
+      if (mounted) {
+        setState(() => isLoadingRooms = false);
+      }
+    }
+  }
+
+  Future<void> _initializeRoomsAndSchedule() async {
+    await loadRoomsFromFirestore();
+    _listenToRoomUpdates();
+    if (selectedRoom.isNotEmpty) {
+      await loadScheduleForRoom();
+    }
+  }
+
+  void _listenToRoomUpdates() {
+    _roomsSub?.cancel();
+
+    _roomsSub = FirebaseFirestore.instance
+        .collection('rooms')
+        .snapshots()
+        .listen((_) async {
+      final previousRoom = selectedRoom;
+      await loadRoomsFromFirestore();
+
+      if (!mounted) return;
+      if (selectedRoom.isNotEmpty && previousRoom != selectedRoom) {
+        await loadScheduleForRoom();
+      }
+    }, onError: (_) async {
+      await loadRoomsFromFirestore();
+    });
   }
 
   Future<void> _signOut(BuildContext context) async {
@@ -1871,11 +1999,20 @@ class _SchedulePageState extends State<SchedulePage>
                           ),
                         ),
                         const SizedBox(width: 12),
-                        _RoomDropdown(
+                        isLoadingRooms
+                            ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: _nuBlue,
+                          ),
+                        )
+                            : _RoomDropdown(
                           rooms: rooms,
                           selectedRoom: selectedRoom,
                           onChanged: (v) async {
-                            if (v == null) return;
+                            if (v == null || v == selectedRoom) return;
                             setState(() => selectedRoom = v);
                             await loadScheduleForRoom();
                           },
@@ -2142,7 +2279,15 @@ class _RoomDropdown extends StatelessWidget {
         border: Border.all(color: _nuBlue.withOpacity(0.2)),
       ),
       child: DropdownButton<String>(
-        value: selectedRoom,
+        value: rooms.contains(selectedRoom) ? selectedRoom : null,
+        hint: const Text(
+          'No rooms',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: _nuDarkBlue,
+            fontSize: 13,
+          ),
+        ),
         underline: const SizedBox(),
         isDense: true,
         style: const TextStyle(
@@ -2165,7 +2310,7 @@ class _RoomDropdown extends StatelessWidget {
           ),
         )
             .toList(),
-        onChanged: onChanged,
+        onChanged: rooms.isEmpty ? null : onChanged,
       ),
     );
   }
