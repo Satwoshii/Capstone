@@ -46,8 +46,8 @@ class _SchedulePageState extends State<SchedulePage>
   late AnimationController _fadeCtrl;
   late Animation<double> _fadeAnim;
 
-  final List<String> defaultRooms = ['706', '707', '708', '709', '710'];
-  List<String> rooms = ['706', '707', '708', '709', '710'];
+  final List<String> defaultRooms = ['706', '707', '708', '709', '710', '722'];
+  List<String> rooms = ['706', '707', '708', '709', '710', '722'];
   bool isLoadingRooms = false;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _roomsSub;
 

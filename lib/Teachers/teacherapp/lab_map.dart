@@ -17,7 +17,7 @@ class LabMapPage extends StatefulWidget {
 }
 
 class _LabMapPageState extends State<LabMapPage> {
-  static const List<String> _defaultRooms = ['706', '707', '708', '709', '710'];
+  static const List<String> _defaultRooms = ['706', '707', '708', '709', '710', '722'];
 
   List<String> rooms = List<String>.from(_defaultRooms);
   String selectedRoom = '706';
