@@ -32,6 +32,7 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
+  final _sectionCtrl = TextEditingController();
   final _commentCtrl = TextEditingController();
 
   bool _mouseOk = true;
@@ -82,6 +83,7 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
   void dispose() {
     _nameCtrl.dispose();
     _emailCtrl.dispose();
+    _sectionCtrl.dispose();
     _commentCtrl.dispose();
     _fadeCtrl.dispose();
     super.dispose();
@@ -104,6 +106,7 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
       if (token == null || token.isEmpty) {
         _nameCtrl.text = (widget.initialStudentName ?? 'Student').trim();
         _emailCtrl.text = (widget.initialStudentEmail ?? '').trim();
+        _sectionCtrl.text = '';
         return;
       }
 
@@ -112,6 +115,7 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
       if (payload == null) {
         _nameCtrl.text = (widget.initialStudentName ?? 'Student').trim();
         _emailCtrl.text = (widget.initialStudentEmail ?? '').trim();
+        _sectionCtrl.text = '';
         return;
       }
 
@@ -129,15 +133,18 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
           _nameCtrl.text =
               (data['full_name'] ?? data['name'] ?? tokenName).toString().trim();
           _emailCtrl.text = (data['email'] ?? tokenEmail).toString().trim();
+          _sectionCtrl.text = (data['section'] ?? '').toString().trim();
           return;
         }
       }
 
       _nameCtrl.text = tokenName.trim();
       _emailCtrl.text = tokenEmail.trim();
+      _sectionCtrl.text = '';
     } catch (_) {
       _nameCtrl.text = (widget.initialStudentName ?? 'Student').trim();
       _emailCtrl.text = (widget.initialStudentEmail ?? '').trim();
+      _sectionCtrl.text = '';
     }
   }
 
@@ -158,7 +165,7 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
       _pcCode = code;
 
       if (!doc.exists) {
-        _pcCode = null; // Mark as null so UI shows error state
+        _pcCode = null;
         return;
       }
 
@@ -339,7 +346,6 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
       return;
     }
 
-    // Comment is now optional
     String userComment = _commentCtrl.text.trim();
 
     setState(() {
@@ -415,6 +421,7 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
 
     final studentName = _nameCtrl.text.trim();
     final studentEmail = _emailCtrl.text.trim().toLowerCase();
+    final studentSection = _sectionCtrl.text.trim();
 
     final peripherals = {
       'mouse': _mouseOk,
@@ -445,9 +452,11 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
         'pc': _pcLabel ?? '',
         'student_name': studentName,
         'student_email': studentEmail,
+        'student_section': studentSection,
         'reported_by': studentName,
         'reported_by_name': studentName,
         'reported_by_email': studentEmail,
+        'reported_by_section': studentSection,
         'comment': _commentCtrl.text.trim(),
         'final_report_text': finalNarrative,
         'peripherals': peripherals,
@@ -471,6 +480,7 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
       await FirebaseFirestore.instance.collection('attendance').add({
         'student_name': studentName,
         'student_email': studentEmail,
+        'student_section': studentSection,
         'lab': _lab ?? '',
         'pc': _pcLabel ?? '',
         'pc_code': _pcCode ?? '',
@@ -489,6 +499,7 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
         'reported_by': studentName,
         'reported_by_name': studentName,
         'reported_by_email': studentEmail,
+        'reported_by_section': studentSection,
         'updated_at': FieldValue.serverTimestamp(),
         'peripherals': peripherals,
         'ai_category': _aiResult?.category ?? '',
@@ -700,38 +711,49 @@ class _StudentReportFormPageState extends State<StudentReportFormPage>
                           _FormPanel(
                             dotColor: const Color(0xFF185FA5),
                             title: 'Student Information',
-                            child: isWide
-                                ? Row(
+                            child: Column(
                               children: [
-                                Expanded(
-                                  child: _ReadOnlyField(
-                                    label: 'FULL NAME',
-                                    controller: _nameCtrl,
-                                    icon: Icons.person_outline,
+                                if (isWide)
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _ReadOnlyField(
+                                          label: 'FULL NAME',
+                                          controller: _nameCtrl,
+                                          icon: Icons.person_outline,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: _ReadOnlyField(
+                                          label: 'STUDENT EMAIL',
+                                          controller: _emailCtrl,
+                                          icon: Icons.email_outlined,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                else
+                                  Column(
+                                    children: [
+                                      _ReadOnlyField(
+                                        label: 'FULL NAME',
+                                        controller: _nameCtrl,
+                                        icon: Icons.person_outline,
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _ReadOnlyField(
+                                        label: 'STUDENT EMAIL',
+                                        controller: _emailCtrl,
+                                        icon: Icons.email_outlined,
+                                      ),
+                                    ],
                                   ),
-                                ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: _ReadOnlyField(
-                                    label: 'STUDENT EMAIL',
-                                    controller: _emailCtrl,
-                                    icon: Icons.email_outlined,
-                                  ),
-                                ),
-                              ],
-                            )
-                                : Column(
-                              children: [
-                                _ReadOnlyField(
-                                  label: 'FULL NAME',
-                                  controller: _nameCtrl,
-                                  icon: Icons.person_outline,
-                                ),
                                 const SizedBox(height: 14),
                                 _ReadOnlyField(
-                                  label: 'STUDENT EMAIL',
-                                  controller: _emailCtrl,
-                                  icon: Icons.email_outlined,
+                                  label: 'SECTION',
+                                  controller: _sectionCtrl,
+                                  icon: Icons.groups_outlined,
                                 ),
                               ],
                             ),
@@ -1412,4 +1434,3 @@ class _ErrorScaffold extends StatelessWidget {
     );
   }
 }
-//e
