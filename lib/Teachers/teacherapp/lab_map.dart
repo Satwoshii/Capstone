@@ -952,10 +952,17 @@ class _LabMapPageState extends State<LabMapPage> {
     );
   }
 
+  // ── Center Grid ──────────────────────────────────────────────────────────────
+  // Layout mirrors the reference image:
+  //   Left cluster : PC1–PC5 / PC11–PC15 / PC21–PC25 / PC31–PC35  (rows 1-4, cols 1-5)
+  //   Right cluster: PC6–PC10 / PC16–PC20 / PC26–PC30 / PC36–PC40 (rows 1-4, cols 6-10)
+  // The two clusters are separated by a visible aisle gap.
+
   Widget _buildCenterGrid() {
     return Expanded(
       child: Column(
         children: [
+          // ── Header bar ──
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             decoration: BoxDecoration(
@@ -966,7 +973,8 @@ class _LabMapPageState extends State<LabMapPage> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.grid_view_rounded, size: 16, color: Colors.black38),
+                const Icon(Icons.grid_view_rounded,
+                    size: 16, color: Colors.black38),
                 const SizedBox(width: 10),
                 Text(
                   'WORKSTATION LAYOUT',
@@ -982,31 +990,71 @@ class _LabMapPageState extends State<LabMapPage> {
               ],
             ),
           ),
+
+          // ── Two-cluster grid ──
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 560),
-                  child: GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 5,
-                      mainAxisSpacing: 10,
-                      crossAxisSpacing: 10,
-                      childAspectRatio: 1.2,
-                    ),
-                    itemCount: 40,
-                    itemBuilder: (_, i) => _buildPcBox('PC${i + 1}'),
-                  ),
-                ),
+                child: _buildTwoClusterLayout(),
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  /// Builds the two side-by-side 5×4 clusters that match the reference image.
+  ///
+  /// Cluster A (left)  → PC1-5, PC11-15, PC21-25, PC31-35
+  /// Cluster B (right) → PC6-10, PC16-20, PC26-30, PC36-40
+  Widget _buildTwoClusterLayout() {
+    // Each cluster has 4 rows × 5 columns
+    // Row r, col c (0-indexed) → PC number:
+    //   Cluster A: (r * 10) + c + 1
+    //   Cluster B: (r * 10) + c + 6
+    const int rows = 4;
+    const int cols = 5;
+
+    Widget buildCluster(int Function(int row, int col) pcIndex) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(rows, (r) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: List.generate(cols, (c) {
+                final idx = pcIndex(r, c);
+                return Padding(
+                  padding: EdgeInsets.only(right: c < cols - 1 ? 10 : 0),
+                  child: SizedBox(
+                    width: 80,
+                    height: 66,
+                    child: _buildPcBox('PC$idx'),
+                  ),
+                );
+              }),
+            ),
+          );
+        }),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Left cluster: PC1-5, 11-15, 21-25, 31-35
+        buildCluster((r, c) => r * 10 + c + 1),
+
+        // Aisle gap
+        const SizedBox(width: 40),
+
+        // Right cluster: PC6-10, 16-20, 26-30, 36-40
+        buildCluster((r, c) => r * 10 + c + 6),
+      ],
     );
   }
 
