@@ -10,9 +10,9 @@ import 'package:universal_html/html.dart' as html;
 
 // ── NU Clark Brand Colors ──────────────────────────────────────────────────────
 const Color _nuDarkBlue = Color(0xFF001A52);
-const Color _nuBlue     = Color(0xFF003087);
-const Color _nuGold     = Color(0xFFFFD700);
-const Color _nuWhite    = Color(0xFFF8F9FF);
+const Color _nuBlue = Color(0xFF003087);
+const Color _nuGold = Color(0xFFFFD700);
+const Color _nuWhite = Color(0xFFF8F9FF);
 
 class AttendancePage extends StatefulWidget {
   const AttendancePage({super.key});
@@ -122,7 +122,6 @@ class _AttendancePageState extends State<AttendancePage> {
 
     _scheduleSub = FirebaseFirestore.instance
         .collection('schedules')
-        .where('room', isEqualTo: selectedRoom)
         .where('day', isEqualTo: day)
         .snapshots()
         .listen((_) async {
@@ -151,31 +150,36 @@ class _AttendancePageState extends State<AttendancePage> {
     try {
       final query = await FirebaseFirestore.instance
           .collection('schedules')
-          .where('room', isEqualTo: selectedRoom)
           .where('day', isEqualTo: day)
           .get();
 
       QueryDocumentSnapshot<Map<String, dynamic>>? activeDoc;
 
-      for (final doc in query.docs) {
-        final data = doc.data();
+      for (final room in rooms) {
+        for (final doc in query.docs) {
+          final data = doc.data();
 
-        final startTime = (data['start_time'] ?? '').toString().trim();
-        final endTime = (data['end_time'] ?? '').toString().trim();
+          final docRoom = (data['room'] ?? '').toString().trim();
+          if (docRoom != room) continue;
 
-        final start = parseTimeForToday(startTime);
-        final end = parseTimeForToday(endTime);
+          final startTime = (data['start_time'] ?? '').toString().trim();
+          final endTime = (data['end_time'] ?? '').toString().trim();
 
-        if (start == null || end == null) continue;
+          final start = parseTimeForToday(startTime);
+          final end = parseTimeForToday(endTime);
 
-        final isActive =
-            (now.isAfter(start) || now.isAtSameMomentAs(start)) &&
-                now.isBefore(end);
+          if (start == null || end == null) continue;
 
-        if (isActive) {
-          activeDoc = doc;
-          break;
+          final isActive =
+              (now.isAfter(start) || now.isAtSameMomentAs(start)) &&
+                  now.isBefore(end);
+
+          if (isActive) {
+            activeDoc = doc;
+            break;
+          }
         }
+        if (activeDoc != null) break;
       }
 
       if (!mounted) return;
@@ -194,6 +198,7 @@ class _AttendancePageState extends State<AttendancePage> {
         final data = activeDoc.data();
 
         setState(() {
+          selectedRoom = (data['room'] ?? '').toString();
           currentSubject = (data['subject'] ?? '').toString();
           currentSection = (data['section'] ?? '').toString();
           currentTimeSlot = (data['time_slot'] ?? '').toString();
@@ -238,16 +243,41 @@ class _AttendancePageState extends State<AttendancePage> {
         grouped[email] = {
           'present': 0.0,
           'late': 0.0,
+          'absent': 0.0,
+          'score': 0.0,
           'dates': <String>[],
           'scan_times': <String>[],
         };
       }
 
-      if (scannedAt.isBefore(lateThreshold)) {
+      final overrideStatus =
+      (data['teacher_attendance_status'] ?? '').toString().toLowerCase();
+
+      if (overrideStatus == 'present') {
         grouped[email]!['present'] =
             (grouped[email]!['present'] as double) + 1.0;
+        grouped[email]!['score'] =
+            (grouped[email]!['score'] as double) + 1.0;
+      } else if (overrideStatus == 'late') {
+        grouped[email]!['late'] =
+            (grouped[email]!['late'] as double) + 1.0;
+        grouped[email]!['score'] =
+            (grouped[email]!['score'] as double) + 0.5;
+      } else if (overrideStatus == 'absent') {
+        grouped[email]!['absent'] =
+            (grouped[email]!['absent'] as double) + 1.0;
       } else {
-        grouped[email]!['late'] = (grouped[email]!['late'] as double) + 0.5;
+        if (scannedAt.isBefore(lateThreshold)) {
+          grouped[email]!['present'] =
+              (grouped[email]!['present'] as double) + 1.0;
+          grouped[email]!['score'] =
+              (grouped[email]!['score'] as double) + 1.0;
+        } else {
+          grouped[email]!['late'] =
+              (grouped[email]!['late'] as double) + 1.0;
+          grouped[email]!['score'] =
+              (grouped[email]!['score'] as double) + 0.5;
+        }
       }
 
       final date = (data['date'] ?? '').toString().trim();
@@ -282,6 +312,7 @@ class _AttendancePageState extends State<AttendancePage> {
         ex.TextCellValue('Email'),
         ex.TextCellValue('Present'),
         ex.TextCellValue('Late'),
+        ex.TextCellValue('Absent'),
         ex.TextCellValue('Attendance Score'),
         ex.TextCellValue('Date Attended'),
         ex.TextCellValue('Room'),
@@ -294,13 +325,15 @@ class _AttendancePageState extends State<AttendancePage> {
         final email = entry.key;
         final present = entry.value['present'] as double;
         final late = entry.value['late'] as double;
-        final score = present + late;
+        final absent = entry.value['absent'] as double;
+        final score = entry.value['score'] as double;
         final dates = (entry.value['dates'] as List<String>).join(', ');
 
         sheet.appendRow([
           ex.TextCellValue(email),
           ex.TextCellValue(present.toString()),
           ex.TextCellValue(late.toString()),
+          ex.TextCellValue(absent.toString()),
           ex.TextCellValue(score.toString()),
           ex.TextCellValue(dates),
           ex.TextCellValue(selectedRoom),
@@ -339,12 +372,14 @@ class _AttendancePageState extends State<AttendancePage> {
 
   void _snack(String msg, {bool isSuccess = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: isSuccess ? const Color(0xFF3B6D11) : _nuDarkBlue,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isSuccess ? const Color(0xFF3B6D11) : _nuDarkBlue,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
   }
 
   void showAttendanceDetails(
@@ -380,7 +415,8 @@ class _AttendancePageState extends State<AttendancePage> {
             children: [
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
                 decoration: const BoxDecoration(
                   color: _nuDarkBlue,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
@@ -388,12 +424,23 @@ class _AttendancePageState extends State<AttendancePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Attendance Details',
-                        style: TextStyle(color: _nuWhite, fontSize: 15, fontWeight: FontWeight.w700)),
+                    const Text(
+                      'Attendance Details',
+                      style: TextStyle(
+                        color: _nuWhite,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                     const SizedBox(height: 2),
-                    Text(email,
-                        style: TextStyle(color: _nuGold.withOpacity(0.8), fontSize: 11),
-                        overflow: TextOverflow.ellipsis),
+                    Text(
+                      email,
+                      style: TextStyle(
+                        color: _nuGold.withOpacity(0.8),
+                        fontSize: 11,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
               ),
@@ -402,12 +449,16 @@ class _AttendancePageState extends State<AttendancePage> {
                 child: userDocs.isEmpty
                     ? const Padding(
                   padding: EdgeInsets.all(24),
-                  child: Text('No attendance records found.', style: TextStyle(color: Colors.black38)),
+                  child: Text(
+                    'No attendance records found.',
+                    style: TextStyle(color: Colors.black38),
+                  ),
                 )
                     : ListView.separated(
                   shrinkWrap: true,
                   itemCount: userDocs.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF3F4F6)),
+                  separatorBuilder: (_, __) =>
+                  const Divider(height: 1, color: Color(0xFFF3F4F6)),
                   itemBuilder: (_, index) {
                     final data = userDocs[index].data();
                     final timestamp = data['timestamp'];
@@ -415,29 +466,54 @@ class _AttendancePageState extends State<AttendancePage> {
 
                     if (timestamp is Timestamp) {
                       final dt = timestamp.toDate();
-                      final h = dt.hour == 0 ? 12 : dt.hour > 12 ? dt.hour - 12 : dt.hour;
+                      final h =
+                      dt.hour == 0 ? 12 : dt.hour > 12 ? dt.hour - 12 : dt.hour;
                       final m = dt.minute.toString().padLeft(2, '0');
                       final p = dt.hour >= 12 ? 'PM' : 'AM';
                       scanText = '$h:$m $p';
                     }
 
                     return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 12,
+                      ),
                       child: Row(
                         children: [
                           Container(
-                            width: 32, height: 32,
-                            decoration: BoxDecoration(color: const Color(0xFFE8EEF8), borderRadius: BorderRadius.circular(8)),
-                            child: const Icon(Icons.calendar_today_outlined, size: 15, color: _nuDarkBlue),
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE8EEF8),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.calendar_today_outlined,
+                              size: 15,
+                              color: _nuDarkBlue,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              crossAxisAlignment:
+                              CrossAxisAlignment.start,
                               children: [
-                                Text((data['date'] ?? 'No date').toString(),
-                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
-                                Text('Scan time: $scanText', style: const TextStyle(fontSize: 11, color: Colors.black45)),
+                                Text(
+                                  (data['date'] ?? 'No date').toString(),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF374151),
+                                  ),
+                                ),
+                                Text(
+                                  'Scan time: $scanText',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.black45,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -457,9 +533,14 @@ class _AttendancePageState extends State<AttendancePage> {
                       foregroundColor: _nuDarkBlue,
                       side: BorderSide(color: Colors.black.withOpacity(0.15)),
                       padding: const EdgeInsets.symmetric(vertical: 11),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
-                    child: const Text('Close', style: TextStyle(fontWeight: FontWeight.w600)),
+                    child: const Text(
+                      'Close',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ),
               ),
@@ -481,19 +562,43 @@ class _AttendancePageState extends State<AttendancePage> {
           bottomRight: Radius.circular(12),
         ),
         border: const Border(left: BorderSide(color: _nuGold, width: 5)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 3))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: hasOngoingClass
           ? Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(color: _nuGold, borderRadius: BorderRadius.circular(4)),
-            child: const Text('ONGOING CLASS', style: TextStyle(color: _nuDarkBlue, fontSize: 9, fontWeight: FontWeight.w900)),
+            padding:
+            const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: _nuGold,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Text(
+              'ONGOING CLASS',
+              style: TextStyle(
+                color: _nuDarkBlue,
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
           ),
           const SizedBox(height: 12),
-          Text(currentSubject, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+          Text(
+            currentSubject,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -501,7 +606,10 @@ class _AttendancePageState extends State<AttendancePage> {
               const SizedBox(width: 24),
               _classMeta(Icons.group_outlined, currentSection),
               const SizedBox(width: 24),
-              _classMeta(Icons.meeting_room_outlined, 'Room $selectedRoom'),
+              _classMeta(
+                Icons.meeting_room_outlined,
+                'Room $selectedRoom',
+              ),
             ],
           ),
         ],
@@ -509,20 +617,35 @@ class _AttendancePageState extends State<AttendancePage> {
           : Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Room $selectedRoom', style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600)),
+          const Text(
+            'Auto Room Detection',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 8),
-          const Text('No class ongoing right now.', style: TextStyle(color: Colors.white38, fontSize: 13)),
+          const Text(
+            'No class ongoing right now.',
+            style: TextStyle(color: Colors.white38, fontSize: 13),
+          ),
         ],
       ),
     );
   }
 
   Widget _classMeta(IconData icon, String text) {
-    return Row(children: [
-      Icon(icon, size: 14, color: _nuGold.withOpacity(0.7)),
-      const SizedBox(width: 8),
-      Text(text, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-    ]);
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: _nuGold.withOpacity(0.7)),
+        const SizedBox(width: 8),
+        Text(
+          text,
+          style: const TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+      ],
+    );
   }
 
   @override
@@ -542,22 +665,43 @@ class _AttendancePageState extends State<AttendancePage> {
         title: Row(
           children: [
             Container(
-              width: 36, height: 36,
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
-                shape: BoxShape.circle, color: Colors.white,
+                shape: BoxShape.circle,
+                color: Colors.white,
                 border: Border.all(color: _nuGold, width: 2),
               ),
-              child: ClipOval(child: Image.asset('assets/Images/NUSchoolLogo.png', fit: BoxFit.contain)),
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/Images/NUSchoolLogo.png',
+                  fit: BoxFit.contain,
+                ),
+              ),
             ),
             const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text('ATTENDANCE',
-                    style: TextStyle(color: _nuWhite, fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 2)),
-                Text('NATIONAL UNIVERSITY CLARK · FACULTY',
-                    style: TextStyle(color: _nuGold.withOpacity(0.85), fontSize: 9, fontWeight: FontWeight.w500, letterSpacing: 2)),
+                const Text(
+                  'ATTENDANCE',
+                  style: TextStyle(
+                    color: _nuWhite,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 2,
+                  ),
+                ),
+                Text(
+                  'NATIONAL UNIVERSITY CLARK · FACULTY',
+                  style: TextStyle(
+                    color: _nuGold.withOpacity(0.85),
+                    fontSize: 9,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 2,
+                  ),
+                ),
               ],
             ),
           ],
@@ -572,9 +716,9 @@ class _AttendancePageState extends State<AttendancePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Toolbar
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              padding:
+              const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
@@ -582,36 +726,52 @@ class _AttendancePageState extends State<AttendancePage> {
               ),
               child: Row(
                 children: [
-                  const Text("Select Room:", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.black54)),
+                  const Text(
+                    "Current Room:",
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black54,
+                    ),
+                  ),
                   const SizedBox(width: 12),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF4F5F8),
                       border: Border.all(color: Colors.black.withOpacity(0.1)),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: selectedRoom,
-                        style: const TextStyle(color: _nuDarkBlue, fontWeight: FontWeight.w600, fontSize: 13),
-                        items: rooms.map((room) => DropdownMenuItem(value: room, child: Text('Room $room'))).toList(),
-                        onChanged: (value) async {
-                          if (value == null) return;
-                          setState(() { selectedRoom = value; });
-                          await loadCurrentSchedule();
-                          _listenToScheduleRealtime();
-                        },
+                    child: Text(
+                      hasOngoingClass ? 'Room $selectedRoom' : 'No active room',
+                      style: const TextStyle(
+                        color: _nuDarkBlue,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
                       ),
                     ),
                   ),
                   const Spacer(),
-                  // Live status
                   Row(
                     children: [
-                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF22C55E), shape: BoxShape.circle)),
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF22C55E),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
                       const SizedBox(width: 8),
-                      const Text('Live Sync Active', style: TextStyle(fontSize: 12, color: Colors.black45, fontWeight: FontWeight.w500)),
+                      const Text(
+                        'Live Sync Active',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.black45,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -626,9 +786,19 @@ class _AttendancePageState extends State<AttendancePage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.event_busy_outlined, size: 52, color: Colors.black12),
+                    Icon(
+                      Icons.event_busy_outlined,
+                      size: 52,
+                      color: Colors.black12,
+                    ),
                     const SizedBox(height: 12),
-                    const Text('No active class attendance to display.', style: TextStyle(fontSize: 15, color: Colors.black38)),
+                    const Text(
+                      'No active class attendance to display.',
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: Colors.black38,
+                      ),
+                    ),
                   ],
                 ),
               )
@@ -641,7 +811,11 @@ class _AttendancePageState extends State<AttendancePage> {
                     .snapshots(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator(color: _nuDarkBlue));
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: _nuDarkBlue,
+                      ),
+                    );
                   }
 
                   final docs = snapshot.data!.docs;
@@ -653,23 +827,46 @@ class _AttendancePageState extends State<AttendancePage> {
                       Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(color: const Color(0xFFE8EEF8), borderRadius: BorderRadius.circular(6)),
-                            child: Text('${emails.length} student${emails.length != 1 ? 's' : ''} scanned',
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _nuDarkBlue)),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE8EEF8),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${emails.length} student${emails.length != 1 ? 's' : ''} scanned',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: _nuDarkBlue,
+                              ),
+                            ),
                           ),
                           const Spacer(),
                           ElevatedButton.icon(
                             onPressed: () => exportToExcel(docs),
-                            icon: const Icon(Icons.download_outlined, size: 16),
+                            icon: const Icon(
+                              Icons.download_outlined,
+                              size: 16,
+                            ),
                             label: const Text("Export Excel"),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: _nuDarkBlue,
                               foregroundColor: _nuGold,
                               elevation: 0,
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              textStyle: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ],
@@ -681,9 +878,19 @@ class _AttendancePageState extends State<AttendancePage> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.people_outline, size: 48, color: Colors.black12),
+                              Icon(
+                                Icons.people_outline,
+                                size: 48,
+                                color: Colors.black12,
+                              ),
                               const SizedBox(height: 12),
-                              const Text('No students have scanned for this class yet.', style: TextStyle(fontSize: 14, color: Colors.black38)),
+                              const Text(
+                                'No students have scanned for this class yet.',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.black38,
+                                ),
+                              ),
                             ],
                           ),
                         )
@@ -691,59 +898,120 @@ class _AttendancePageState extends State<AttendancePage> {
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.black.withOpacity(0.07)),
+                            border: Border.all(
+                              color: Colors.black.withOpacity(0.07),
+                            ),
                           ),
                           child: Column(
                             children: [
-                              // Table Header
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 13,
+                                ),
                                 decoration: const BoxDecoration(
                                   color: Color(0xFFF9FAFB),
-                                  borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-                                  border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+                                  borderRadius: BorderRadius.vertical(
+                                    top: Radius.circular(12),
+                                  ),
+                                  border: Border(
+                                    bottom: BorderSide(
+                                      color: Color(0xFFE5E7EB),
+                                    ),
+                                  ),
                                 ),
                                 child: const Row(
                                   children: [
-                                    _HeaderCell(flex: 4, text: 'STUDENT EMAIL'),
-                                    _HeaderCell(flex: 1, text: 'PRESENT'),
-                                    _HeaderCell(flex: 1, text: 'LATE'),
-                                    _HeaderCell(flex: 2, text: 'SCORE'),
-                                    _HeaderCell(flex: 2, text: 'ACTIONS'),
+                                    _HeaderCell(
+                                      flex: 4,
+                                      text: 'STUDENT EMAIL',
+                                    ),
+                                    _HeaderCell(
+                                      flex: 1,
+                                      text: 'PRESENT',
+                                    ),
+                                    _HeaderCell(
+                                      flex: 1,
+                                      text: 'LATE',
+                                    ),
+                                    _HeaderCell(
+                                      flex: 1,
+                                      text: 'ABSENT',
+                                    ),
+                                    _HeaderCell(
+                                      flex: 2,
+                                      text: 'SCORE',
+                                    ),
+                                    _HeaderCell(
+                                      flex: 2,
+                                      text: 'ACTIONS',
+                                    ),
                                   ],
                                 ),
                               ),
-                              // Table Rows
                               Expanded(
                                 child: ListView.separated(
                                   itemCount: emails.length,
-                                  separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF3F4F6)),
+                                  separatorBuilder: (_, __) =>
+                                  const Divider(
+                                    height: 1,
+                                    color: Color(0xFFF3F4F6),
+                                  ),
                                   itemBuilder: (context, index) {
                                     final email = emails[index];
-                                    final present = grouped[email]!['present'] as double;
-                                    final late = grouped[email]!['late'] as double;
-                                    final score = present + late;
+                                    final present =
+                                    grouped[email]!['present']
+                                    as double;
+                                    final late =
+                                    grouped[email]!['late']
+                                    as double;
+                                    final absent =
+                                    grouped[email]!['absent']
+                                    as double;
+                                    final score =
+                                    grouped[email]!['score']
+                                    as double;
 
                                     return _AttendanceRow(
                                       email: email,
                                       present: present,
                                       late: late,
+                                      absent: absent,
                                       score: score,
-                                      onDetails: () => showAttendanceDetails(context, email, docs),
+                                      onDetails: () =>
+                                          showAttendanceDetails(
+                                            context,
+                                            email,
+                                            docs,
+                                          ),
                                     );
                                   },
                                 ),
                               ),
-                              // Footer
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 11,
+                                ),
                                 decoration: const BoxDecoration(
                                   color: Color(0xFFF9FAFB),
-                                  border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
-                                  borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
+                                  border: Border(
+                                    top: BorderSide(
+                                      color: Color(0xFFE5E7EB),
+                                    ),
+                                  ),
+                                  borderRadius: BorderRadius.vertical(
+                                    bottom: Radius.circular(12),
+                                  ),
                                 ),
-                                child: Text('${emails.length} record${emails.length != 1 ? 's' : ''}',
-                                    style: const TextStyle(fontSize: 12, color: Colors.black45, fontWeight: FontWeight.w500)),
+                                child: Text(
+                                  '${emails.length} record${emails.length != 1 ? 's' : ''}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.black45,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
                               ),
                             ],
                           ),
@@ -763,12 +1031,18 @@ class _AttendancePageState extends State<AttendancePage> {
 
 class _AttendanceRow extends StatefulWidget {
   final String email;
-  final double present, late, score;
+  final double present;
+  final double late;
+  final double absent;
+  final double score;
   final VoidCallback onDetails;
 
   const _AttendanceRow({
-    required this.email, required this.present,
-    required this.late, required this.score,
+    required this.email,
+    required this.present,
+    required this.late,
+    required this.absent,
+    required this.score,
     required this.onDetails,
   });
 
@@ -781,8 +1055,17 @@ class _AttendanceRowState extends State<_AttendanceRow> {
 
   @override
   Widget build(BuildContext context) {
-    final scoreColor = widget.score >= 1.0 ? const Color(0xFF27500A) : const Color(0xFF791F1F);
-    final scoreBg = widget.score >= 1.0 ? const Color(0xFFEAF3DE) : const Color(0xFFFCEBEB);
+    final scoreColor = widget.score >= 1.0
+        ? const Color(0xFF27500A)
+        : widget.score > 0
+        ? const Color(0xFF854F0B)
+        : const Color(0xFF791F1F);
+
+    final scoreBg = widget.score >= 1.0
+        ? const Color(0xFFEAF3DE)
+        : widget.score > 0
+        ? const Color(0xFFFAEEDA)
+        : const Color(0xFFFCEBEB);
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -798,28 +1081,93 @@ class _AttendanceRowState extends State<_AttendanceRow> {
               child: Row(
                 children: [
                   Container(
-                    width: 30, height: 30,
-                    decoration: BoxDecoration(color: const Color(0xFFE8EEF8), borderRadius: BorderRadius.circular(6)),
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE8EEF8),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
                     child: Center(
-                      child: Text(widget.email.isNotEmpty ? widget.email[0].toUpperCase() : '?',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _nuDarkBlue)),
+                      child: Text(
+                        widget.email.isNotEmpty
+                            ? widget.email[0].toUpperCase()
+                            : '?',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: _nuDarkBlue,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
-                  Expanded(child: Text(widget.email, style: const TextStyle(fontSize: 13, color: Color(0xFF374151)), overflow: TextOverflow.ellipsis)),
+                  Expanded(
+                    child: Text(
+                      widget.email,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF374151),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
             ),
-            Expanded(flex: 1, child: Text(widget.present.toStringAsFixed(0), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF374151)))),
-            Expanded(flex: 1, child: Text(widget.late.toStringAsFixed(0), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF374151)))),
+            Expanded(
+              flex: 1,
+              child: Text(
+                widget.present.toStringAsFixed(0),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF374151),
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 1,
+              child: Text(
+                widget.late.toStringAsFixed(0),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF374151),
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 1,
+              child: Text(
+                widget.absent.toStringAsFixed(0),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF374151),
+                ),
+              ),
+            ),
             Expanded(
               flex: 2,
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Container(
-                  width: 48, padding: const EdgeInsets.symmetric(vertical: 4),
-                  decoration: BoxDecoration(color: scoreBg, borderRadius: BorderRadius.circular(8), border: Border.all(color: scoreColor.withOpacity(0.2))),
-                  child: Text(widget.score.toStringAsFixed(1), textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: scoreColor)),
+                  width: 56,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  decoration: BoxDecoration(
+                    color: scoreBg,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: scoreColor.withOpacity(0.2)),
+                  ),
+                  child: Text(
+                    widget.score.toStringAsFixed(1),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: scoreColor,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -847,6 +1195,7 @@ class _DetailsBtn extends StatefulWidget {
 
 class _DetailsBtnState extends State<_DetailsBtn> {
   bool _h = false;
+
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
@@ -861,9 +1210,19 @@ class _DetailsBtnState extends State<_DetailsBtn> {
           decoration: BoxDecoration(
             color: _h ? _nuDarkBlue : Colors.transparent,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: _h ? _nuDarkBlue : Colors.black.withOpacity(0.12), width: 1.5),
+            border: Border.all(
+              color: _h ? _nuDarkBlue : Colors.black.withOpacity(0.12),
+              width: 1.5,
+            ),
           ),
-          child: Text('Details', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _h ? _nuGold : _nuDarkBlue)),
+          child: Text(
+            'Details',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: _h ? _nuGold : _nuDarkBlue,
+            ),
+          ),
         ),
       ),
     );
@@ -873,10 +1232,20 @@ class _DetailsBtnState extends State<_DetailsBtn> {
 class _HeaderCell extends StatelessWidget {
   final int flex;
   final String text;
+
   const _HeaderCell({required this.flex, required this.text});
+
   @override
   Widget build(BuildContext context) => Expanded(
     flex: flex,
-    child: Text(text, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.black45, letterSpacing: 0.8)),
+    child: Text(
+      text,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: Colors.black45,
+        letterSpacing: 0.8,
+      ),
+    ),
   );
 }

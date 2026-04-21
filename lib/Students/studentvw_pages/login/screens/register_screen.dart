@@ -3,8 +3,8 @@ import '../services/auth_service.dart';
 
 // ── NU Clark Brand Colors ──────────────────────────────────────────────────────
 const Color _nuDarkBlue = Color(0xFF001A52);
-const Color _nuGold     = Color(0xFFFFD700);
-const Color _nuWhite    = Color(0xFFF8F9FF);
+const Color _nuGold = Color(0xFFFFD700);
+const Color _nuWhite = Color(0xFFF8F9FF);
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -15,17 +15,23 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen>
     with SingleTickerProviderStateMixin {
-  final fullName        = TextEditingController();
-  final email           = TextEditingController();
-  final section         = TextEditingController();
-  final password        = TextEditingController();
+  final fullName = TextEditingController();
+  final email = TextEditingController();
+  final password = TextEditingController();
   final confirmPassword = TextEditingController();
   final auth = AuthService();
 
-  bool showPassword        = false;
+  bool showPassword = false;
   bool showConfirmPassword = false;
-  bool isSubmitting        = false;
+  bool isSubmitting = false;
   String? confirmPasswordError;
+
+  // NEW: section dropdown values
+  String? selectedCourse;
+  String? selectedYearSection;
+
+  final List<String> courseOptions = ['ITE', 'BSCpE'];
+  final List<String> yearSectionOptions = ['301', '302', '303'];
 
   late AnimationController _fadeCtrl;
   late Animation<double> _fadeAnim;
@@ -50,7 +56,6 @@ class _RegisterScreenState extends State<RegisterScreen>
   void dispose() {
     fullName.dispose();
     email.dispose();
-    section.dispose();
     password.dispose();
     confirmPassword.dispose();
     _fadeCtrl.dispose();
@@ -59,10 +64,13 @@ class _RegisterScreenState extends State<RegisterScreen>
 
   Future<void> registerUser() async {
     final normalizedName = fullName.text.trim();
-    final normalizedSection = section.text.trim().toUpperCase();
     final normalizedEmail = email.text.trim().toLowerCase();
     final normalizedPassword = password.text;
     final normalizedConfirm = confirmPassword.text;
+
+    // combine dropdown values into one section string
+    final normalizedSection =
+    '${selectedCourse ?? ''}${selectedYearSection ?? ''}'.trim();
 
     if (normalizedName.isEmpty ||
         normalizedSection.isEmpty ||
@@ -93,7 +101,7 @@ class _RegisterScreenState extends State<RegisterScreen>
     try {
       await auth.register(
         normalizedName,
-        normalizedSection,
+        normalizedSection, // example: ITE301
         normalizedEmail,
         normalizedPassword,
       );
@@ -261,20 +269,70 @@ class _RegisterScreenState extends State<RegisterScreen>
                                 const SizedBox(height: 16),
                                 const _FieldLabel('SECTION'),
                                 const SizedBox(height: 6),
-                                TextField(
-                                  controller: section,
-                                  textCapitalization:
-                                  TextCapitalization.characters,
-                                  style: const TextStyle(fontSize: 14),
+
+                                DropdownButtonFormField<String>(
+                                  value: selectedCourse,
                                   decoration: _inputDeco(
-                                    hint: 'Enter your section',
+                                    hint: 'Select course',
+                                    prefix: const Icon(
+                                      Icons.school_outlined,
+                                      size: 18,
+                                      color: _nuDarkBlue,
+                                    ),
+                                  ),
+                                  items: courseOptions.map((course) {
+                                    return DropdownMenuItem<String>(
+                                      value: course,
+                                      child: Text(course),
+                                    );
+                                  }).toList(),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      selectedCourse = value;
+                                    });
+                                  },
+                                ),
+
+                                const SizedBox(height: 12),
+
+                                DropdownButtonFormField<String>(
+                                  value: selectedYearSection,
+                                  decoration: _inputDeco(
+                                    hint: 'Select section number',
                                     prefix: const Icon(
                                       Icons.groups_2_outlined,
                                       size: 18,
                                       color: _nuDarkBlue,
                                     ),
                                   ),
+                                  items: yearSectionOptions.map((section) {
+                                    return DropdownMenuItem<String>(
+                                      value: section,
+                                      child: Text(section),
+                                    );
+                                  }).toList(),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      selectedYearSection = value;
+                                    });
+                                  },
                                 ),
+
+                                const SizedBox(height: 8),
+
+                                if (selectedCourse != null &&
+                                    selectedYearSection != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 4),
+                                    child: Text(
+                                      'Saved as: ${selectedCourse!}${selectedYearSection!}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: _nuDarkBlue,
+                                      ),
+                                    ),
+                                  ),
 
                                 const SizedBox(height: 16),
                                 const _FieldLabel('EMAIL'),
