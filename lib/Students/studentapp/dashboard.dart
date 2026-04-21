@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../studentvw_pages/report_form.dart';
 import 'login/screens/login_screen.dart';
@@ -9,9 +10,9 @@ import 'login/services/jwt_service.dart';
 
 // ── NU Clark Brand Colors ──────────────────────────────────────────────────────
 const Color _nuDarkBlue = Color(0xFF001A52);
-const Color _nuBlue     = Color(0xFF003087);
-const Color _nuGold     = Color(0xFFFFD700);
-const Color _nuWhite    = Color(0xFFF8F9FF);
+const Color _nuBlue = Color(0xFF003087);
+const Color _nuGold = Color(0xFFFFD700);
+const Color _nuWhite = Color(0xFFF8F9FF);
 const Color _nuLightGray = Color(0xFFF3F4F6);
 const Color _nuDarkGray = Color(0xFF1F2937);
 const Color _errorRed = Color(0xFFE24B4A);
@@ -31,11 +32,11 @@ class _DashboardState extends State<Dashboard>
 
   bool _codeError = false;
 
-  String userName  = 'Student';
+  String userName = 'Student';
   String userEmail = 'No email';
 
   late AnimationController _pulseCtrl;
-  late Animation<double>   _pulseAnim;
+  late Animation<double> _pulseAnim;
 
   @override
   void initState() {
@@ -69,19 +70,109 @@ class _DashboardState extends State<Dashboard>
   Future<void> _loadUserInfo() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString("token");
-    if (token == null) { await _logout(context); return; }
+
+    if (token == null) {
+      await _logout(context);
+      return;
+    }
+
     final payload = JWTService.verifyToken(token);
-    if (payload == null) { await _logout(context); return; }
+
+    if (payload == null) {
+      await _logout(context);
+      return;
+    }
+
+    final savedFullName = prefs.getString("full_name");
+    final savedName = prefs.getString("name");
+    final savedUsername = prefs.getString("username");
+    final savedStudentName = prefs.getString("student_name");
+    final savedEmail = prefs.getString("email");
+
+    String resolvedName = '';
+    String resolvedEmail = '';
+
+    resolvedName = (payload['full_name'] ??
+        payload['name'] ??
+        payload['username'] ??
+        payload['student_name'] ??
+        savedFullName ??
+        savedName ??
+        savedUsername ??
+        savedStudentName ??
+        '')
+        .toString()
+        .trim();
+
+    resolvedEmail = (payload['email'] ?? savedEmail ?? '')
+        .toString()
+        .trim();
+
+    if (resolvedName.isEmpty) {
+      resolvedName = (savedFullName ??
+          savedName ??
+          savedUsername ??
+          savedStudentName ??
+          '')
+          .trim();
+    }
+
+    if (resolvedEmail.isEmpty) {
+      resolvedEmail = (savedEmail ?? '').trim();
+    }
+
+    if (resolvedName.isEmpty && resolvedEmail.isNotEmpty) {
+      try {
+        final query = await FirebaseFirestore.instance
+            .collection('users')
+            .where('email', isEqualTo: resolvedEmail)
+            .limit(1)
+            .get();
+
+        if (query.docs.isNotEmpty) {
+          final data = query.docs.first.data();
+
+          resolvedName = (data['full_name'] ??
+              data['name'] ??
+              data['username'] ??
+              data['student_name'] ??
+              '')
+              .toString()
+              .trim();
+
+          final firestoreEmail =
+          (data['email'] ?? resolvedEmail).toString().trim();
+
+          if (resolvedName.isNotEmpty) {
+            await prefs.setString('full_name', resolvedName);
+          }
+
+          if (firestoreEmail.isNotEmpty) {
+            resolvedEmail = firestoreEmail;
+            await prefs.setString('email', resolvedEmail);
+          }
+        }
+      } catch (e) {
+        debugPrint('Error loading user from Firestore: $e');
+      }
+    }
+
+    if (resolvedName.isEmpty && resolvedEmail.isNotEmpty) {
+      resolvedName = resolvedEmail.split('@').first;
+    }
+
     if (!mounted) return;
+
     setState(() {
-      userName  = (payload['full_name'] ?? payload['name'] ?? 'Student').toString();
-      userEmail = (payload['email'] ?? 'No email').toString();
+      userName = resolvedName.isEmpty ? 'Student' : resolvedName;
+      userEmail = resolvedEmail.isEmpty ? 'No email' : resolvedEmail;
     });
   }
 
   Future<void> _logout(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove("token");
+
     if (!context.mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
@@ -92,10 +183,10 @@ class _DashboardState extends State<Dashboard>
 
   String? parsePC(String qrData) {
     try {
-      final uri  = Uri.parse(qrData);
+      final uri = Uri.parse(qrData);
       final code = uri.queryParameters['code'];
       if (code == null && !qrData.contains('://')) return qrData.trim();
-      if (code != null && code.isNotEmpty)          return code.trim();
+      if (code != null && code.isNotEmpty) return code.trim();
     } catch (_) {
       if (qrData.trim().isNotEmpty) return qrData.trim();
     }
@@ -107,8 +198,8 @@ class _DashboardState extends State<Dashboard>
       context,
       MaterialPageRoute(
         builder: (_) => StudentReportFormPage(
-          pcCode:              scannedPC,
-          initialStudentName:  userName,
+          pcCode: scannedPC,
+          initialStudentName: userName,
           initialStudentEmail: userEmail,
         ),
       ),
@@ -155,7 +246,8 @@ class _DashboardState extends State<Dashboard>
             children: [
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
                 decoration: const BoxDecoration(
                   color: _errorRed,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -202,11 +294,13 @@ class _DashboardState extends State<Dashboard>
                       backgroundColor: _nuDarkBlue,
                       foregroundColor: _nuGold,
                       elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
                     ),
                     child: const Text(
                       'Try Again',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                      style:
+                      TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
                     ),
                   ),
                 ),
@@ -227,7 +321,6 @@ class _DashboardState extends State<Dashboard>
       drawer: _buildDrawer(context),
       body: Stack(
         children: [
-          // ── Camera feed ──────────────────────────────────────────────────────
           Positioned.fill(
             child: MobileScanner(
               controller: MobileScannerController(
@@ -251,10 +344,10 @@ class _DashboardState extends State<Dashboard>
               },
             ),
           ),
-
-          // ── Top vignette ─────────────────────────────────────────────────────
           Positioned(
-            top: 0, left: 0, right: 0,
+            top: 0,
+            left: 0,
+            right: 0,
             height: size.height * 0.32,
             child: Container(
               decoration: BoxDecoration(
@@ -270,10 +363,10 @@ class _DashboardState extends State<Dashboard>
               ),
             ),
           ),
-
-          // ── Bottom vignette ───────────────────────────────────────────────────
           Positioned(
-            bottom: 0, left: 0, right: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
             height: size.height * 0.42,
             child: Container(
               decoration: BoxDecoration(
@@ -289,21 +382,22 @@ class _DashboardState extends State<Dashboard>
               ),
             ),
           ),
-
-          // ── Top navigation bar ───────────────────────────────────────────────
           Positioned(
-            top: 0, left: 0, right: 0,
+            top: 0,
+            left: 0,
+            right: 0,
             child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 child: Row(
                   children: [
-                    // Hamburger menu button
                     Builder(
                       builder: (ctx) => GestureDetector(
                         onTap: () => Scaffold.of(ctx).openDrawer(),
                         child: Container(
-                          width: 44, height: 44,
+                          width: 44,
+                          height: 44,
                           decoration: BoxDecoration(
                             color: Colors.black.withOpacity(0.5),
                             borderRadius: BorderRadius.circular(12),
@@ -326,9 +420,9 @@ class _DashboardState extends State<Dashboard>
                       ),
                     ),
                     const SizedBox(width: 14),
-                    // Logo and title
                     Container(
-                      width: 38, height: 38,
+                      width: 38,
+                      height: 38,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: Colors.white,
@@ -381,8 +475,6 @@ class _DashboardState extends State<Dashboard>
               ),
             ),
           ),
-
-          // ── Scan frame animation ──────────────────────────────────────────────
           Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -390,7 +482,8 @@ class _DashboardState extends State<Dashboard>
                 AnimatedBuilder(
                   animation: _pulseAnim,
                   builder: (_, __) => SizedBox(
-                    width: 280, height: 280,
+                    width: 280,
+                    height: 280,
                     child: CustomPaint(
                       painter: _ScanFramePainter(opacity: _pulseAnim.value),
                     ),
@@ -398,7 +491,8 @@ class _DashboardState extends State<Dashboard>
                 ),
                 const SizedBox(height: 32),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   decoration: BoxDecoration(
                     color: Colors.black.withOpacity(0.6),
                     borderRadius: BorderRadius.circular(24),
@@ -420,19 +514,19 @@ class _DashboardState extends State<Dashboard>
               ],
             ),
           ),
-
-          // ── Bottom action area ────────────────────────────────────────────────
           Positioned(
-            bottom: 0, left: 0, right: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
             child: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // User info card
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.05),
                         borderRadius: BorderRadius.circular(14),
@@ -451,7 +545,8 @@ class _DashboardState extends State<Dashboard>
                       child: Row(
                         children: [
                           Container(
-                            width: 40, height: 40,
+                            width: 40,
+                            height: 40,
                             decoration: BoxDecoration(
                               color: _nuGold.withOpacity(0.15),
                               shape: BoxShape.circle,
@@ -501,8 +596,6 @@ class _DashboardState extends State<Dashboard>
                       ),
                     ),
                     const SizedBox(height: 16),
-
-                    // Code input field
                     _buildCodeInputField(),
                   ],
                 ),
@@ -566,7 +659,8 @@ class _DashboardState extends State<Dashboard>
                   borderRadius: BorderRadius.circular(10),
                   boxShadow: [
                     BoxShadow(
-                      color: (_codeError ? _errorRed : _nuGold).withOpacity(0.4),
+                      color:
+                      (_codeError ? _errorRed : _nuGold).withOpacity(0.4),
                       blurRadius: 8,
                       spreadRadius: 0,
                     ),
@@ -609,7 +703,8 @@ class _DashboardState extends State<Dashboard>
               width: 2,
             ),
           ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          contentPadding:
+          const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
           errorText: _codeError ? 'Invalid or unrecognized code' : null,
           errorStyle: const TextStyle(
             color: _errorRed,
@@ -631,14 +726,12 @@ class _DashboardState extends State<Dashboard>
     ),
   );
 
-  // ── Drawer ──────────────────────────────────────────────────────────────────
   Widget _buildDrawer(BuildContext context) {
     return Drawer(
       child: Material(
         color: _nuWhite,
         child: Column(
           children: [
-            // Drawer header with gradient
             Container(
               width: double.infinity,
               padding: EdgeInsets.only(
@@ -658,7 +751,8 @@ class _DashboardState extends State<Dashboard>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    width: 64, height: 64,
+                    width: 64,
+                    height: 64,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: Colors.white,
@@ -704,7 +798,8 @@ class _DashboardState extends State<Dashboard>
                   ),
                   const SizedBox(height: 14),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: _nuGold.withOpacity(0.18),
                       borderRadius: BorderRadius.circular(20),
@@ -726,15 +821,11 @@ class _DashboardState extends State<Dashboard>
                 ],
               ),
             ),
-
-            // Divider
             Container(
               height: 3,
               color: _nuGold,
             ),
             const SizedBox(height: 8),
-
-            // Menu items
             _DrawerItem(
               icon: Icons.dashboard_rounded,
               label: 'Dashboard',
@@ -750,12 +841,8 @@ class _DashboardState extends State<Dashboard>
                 });
               },
             ),
-
             const Spacer(),
-
-            // Divider
             const Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
-
             _DrawerItem(
               icon: Icons.logout_rounded,
               label: 'Logout',
@@ -770,28 +857,26 @@ class _DashboardState extends State<Dashboard>
   }
 }
 
-// ── Scan Frame Painter ────────────────────────────────────────────────────────
 class _ScanFramePainter extends CustomPainter {
   final double opacity;
   const _ScanFramePainter({required this.opacity});
 
   @override
   void paint(Canvas canvas, Size size) {
-    const cornerLen  = 32.0;
-    const strokeW    = 3.5;
-    const r          = 14.0;
+    const cornerLen = 32.0;
+    const strokeW = 3.5;
+    const r = 14.0;
 
     final paint = Paint()
-      ..color       = Color.fromRGBO(255, 215, 0, opacity)
+      ..color = Color.fromRGBO(255, 215, 0, opacity)
       ..strokeWidth = strokeW
-      ..style       = PaintingStyle.stroke
-      ..strokeCap   = StrokeCap.round
-      ..strokeJoin  = StrokeJoin.round;
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
 
     final w = size.width;
     final h = size.height;
 
-    // Top-left
     canvas.drawLine(const Offset(r, 0), const Offset(cornerLen, 0), paint);
     canvas.drawLine(const Offset(0, r), const Offset(0, cornerLen), paint);
     canvas.drawArc(
@@ -802,7 +887,6 @@ class _ScanFramePainter extends CustomPainter {
       paint,
     );
 
-    // Top-right
     canvas.drawLine(Offset(w - cornerLen, 0), Offset(w - r, 0), paint);
     canvas.drawLine(Offset(w, r), Offset(w, cornerLen), paint);
     canvas.drawArc(
@@ -813,7 +897,6 @@ class _ScanFramePainter extends CustomPainter {
       paint,
     );
 
-    // Bottom-left
     canvas.drawLine(Offset(0, h - cornerLen), Offset(0, h - r), paint);
     canvas.drawLine(Offset(r, h), Offset(cornerLen, h), paint);
     canvas.drawArc(
@@ -824,7 +907,6 @@ class _ScanFramePainter extends CustomPainter {
       paint,
     );
 
-    // Bottom-right
     canvas.drawLine(Offset(w, h - cornerLen), Offset(w, h - r), paint);
     canvas.drawLine(Offset(w - cornerLen, h), Offset(w - r, h), paint);
     canvas.drawArc(
@@ -835,7 +917,6 @@ class _ScanFramePainter extends CustomPainter {
       paint,
     );
 
-    // Optional: Draw center dot
     final centerPaint = Paint()
       ..color = Color.fromRGBO(255, 215, 0, opacity * 0.6)
       ..style = PaintingStyle.fill;
@@ -846,7 +927,6 @@ class _ScanFramePainter extends CustomPainter {
   bool shouldRepaint(covariant _ScanFramePainter old) => old.opacity != opacity;
 }
 
-// ── Drawer Item ───────────────────────────────────────────────────────────────
 class _DrawerItem extends StatefulWidget {
   final IconData icon;
   final String label;
@@ -872,9 +952,10 @@ class _DrawerItemState extends State<_DrawerItem> {
     final iconBg = widget.isDestructive
         ? const Color(0xFFFCEBEB)
         : const Color(0xFFE8EEF8);
-    final iconColor = widget.isDestructive ? const Color(0xFFDC2626) : _nuDarkBlue;
+    final iconColor =
+    widget.isDestructive ? const Color(0xFFDC2626) : _nuDarkBlue;
     final textColor =
-    widget.isDestructive ? const Color(0xDC2626) : _nuDarkGray;
+    widget.isDestructive ? const Color(0xFFDC2626) : _nuDarkGray;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -885,13 +966,16 @@ class _DrawerItemState extends State<_DrawerItem> {
           duration: const Duration(milliseconds: 150),
           decoration: BoxDecoration(
             color: _isHovered
-                ? (widget.isDestructive ? const Color(0xFFFCEBEB) : const Color(0xFFE8EEF8))
+                ? (widget.isDestructive
+                ? const Color(0xFFFCEBEB)
+                : const Color(0xFFE8EEF8))
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
           ),
           child: ListTile(
             onTap: widget.onTap,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             leading: Container(
               width: 40,
               height: 40,
@@ -920,7 +1004,8 @@ class _DrawerItemState extends State<_DrawerItem> {
               color: textColor.withOpacity(0.3),
             ),
             dense: false,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           ),
         ),
       ),
