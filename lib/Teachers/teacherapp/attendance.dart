@@ -80,9 +80,10 @@ class _AttendancePageState extends State<AttendancePage> {
   DateTime? parseTimeForToday(String value) {
     final now = DateTime.now();
     final normalized = value.trim().replaceAll(RegExp(r'\s+'), ' ');
-    final match =
-    RegExp(r'^(\d{1,2}):(\d{2})\s?(AM|PM)$', caseSensitive: false)
-        .firstMatch(normalized);
+    final match = RegExp(
+      r'^(\d{1,2}):(\d{2})\s?(AM|PM)$',
+      caseSensitive: false,
+    ).firstMatch(normalized);
 
     if (match == null) return null;
 
@@ -198,13 +199,13 @@ class _AttendancePageState extends State<AttendancePage> {
         final data = activeDoc.data();
 
         setState(() {
-          selectedRoom = (data['room'] ?? '').toString();
-          currentSubject = (data['subject'] ?? '').toString();
-          currentSection = (data['section'] ?? '').toString();
-          currentTimeSlot = (data['time_slot'] ?? '').toString();
-          currentDay = (data['day'] ?? '').toString();
-          currentStartTime = (data['start_time'] ?? '').toString();
-          currentEndTime = (data['end_time'] ?? '').toString();
+          selectedRoom = (data['room'] ?? '').toString().trim();
+          currentSubject = (data['subject'] ?? '').toString().trim();
+          currentSection = (data['section'] ?? '').toString().trim();
+          currentTimeSlot = (data['time_slot'] ?? '').toString().trim();
+          currentDay = (data['day'] ?? '').toString().trim();
+          currentStartTime = (data['start_time'] ?? '').toString().trim();
+          currentEndTime = (data['end_time'] ?? '').toString().trim();
           hasOngoingClass = true;
         });
       }
@@ -226,6 +227,8 @@ class _AttendancePageState extends State<AttendancePage> {
     for (final doc in docs) {
       final data = doc.data();
       final email = (data['student_email'] ?? '').toString().trim();
+      final name = (data['student_name'] ?? '').toString().trim();
+      final section = (data['student_section'] ?? '').toString().trim();
       final timestamp = data['timestamp'];
 
       if (email.isEmpty || timestamp is! Timestamp) continue;
@@ -241,54 +244,76 @@ class _AttendancePageState extends State<AttendancePage> {
 
       if (!grouped.containsKey(email)) {
         grouped[email] = {
+          'email': email,
+          'student_name': name,
+          'student_section': section,
           'present': 0.0,
           'late': 0.0,
           'absent': 0.0,
           'score': 0.0,
           'dates': <String>[],
           'scan_times': <String>[],
+          'docs': <QueryDocumentSnapshot<Map<String, dynamic>>>[],
+          'latest_doc': doc,
+          'latest_scan': scannedAt,
+          'teacher_attendance_status':
+          (data['teacher_attendance_status'] ?? '').toString().toLowerCase(),
         };
+      }
+
+      final group = grouped[email]!;
+
+      (group['docs'] as List<QueryDocumentSnapshot<Map<String, dynamic>>>)
+          .add(doc);
+
+      final latestScan = group['latest_scan'] as DateTime;
+      if (scannedAt.isAfter(latestScan)) {
+        group['latest_doc'] = doc;
+        group['latest_scan'] = scannedAt;
+
+        if (name.isNotEmpty) {
+          group['student_name'] = name;
+        }
+        if (section.isNotEmpty) {
+          group['student_section'] = section;
+        }
+
+        group['teacher_attendance_status'] =
+            (data['teacher_attendance_status'] ?? '')
+                .toString()
+                .toLowerCase();
       }
 
       final overrideStatus =
       (data['teacher_attendance_status'] ?? '').toString().toLowerCase();
 
       if (overrideStatus == 'present') {
-        grouped[email]!['present'] =
-            (grouped[email]!['present'] as double) + 1.0;
-        grouped[email]!['score'] =
-            (grouped[email]!['score'] as double) + 1.0;
+        group['present'] = (group['present'] as double) + 1.0;
+        group['score'] = (group['score'] as double) + 1.0;
       } else if (overrideStatus == 'late') {
-        grouped[email]!['late'] =
-            (grouped[email]!['late'] as double) + 1.0;
-        grouped[email]!['score'] =
-            (grouped[email]!['score'] as double) + 0.5;
+        group['late'] = (group['late'] as double) + 1.0;
+        group['score'] = (group['score'] as double) + 0.5;
       } else if (overrideStatus == 'absent') {
-        grouped[email]!['absent'] =
-            (grouped[email]!['absent'] as double) + 1.0;
+        group['absent'] = (group['absent'] as double) + 1.0;
       } else {
         if (scannedAt.isBefore(lateThreshold)) {
-          grouped[email]!['present'] =
-              (grouped[email]!['present'] as double) + 1.0;
-          grouped[email]!['score'] =
-              (grouped[email]!['score'] as double) + 1.0;
+          group['present'] = (group['present'] as double) + 1.0;
+          group['score'] = (group['score'] as double) + 1.0;
         } else {
-          grouped[email]!['late'] =
-              (grouped[email]!['late'] as double) + 1.0;
-          grouped[email]!['score'] =
-              (grouped[email]!['score'] as double) + 0.5;
+          group['late'] = (group['late'] as double) + 1.0;
+          group['score'] = (group['score'] as double) + 0.5;
         }
       }
 
       final date = (data['date'] ?? '').toString().trim();
       if (date.isNotEmpty) {
-        final dates = grouped[email]!['dates'] as List<String>;
+        final dates = group['dates'] as List<String>;
         if (!dates.contains(date)) {
           dates.add(date);
         }
       }
 
-      final scanTimes = grouped[email]!['scan_times'] as List<String>;
+      final scanTimes = group['scan_times'] as List<String>;
       final formattedTime =
           '${scannedAt.year}-${scannedAt.month.toString().padLeft(2, '0')}-${scannedAt.day.toString().padLeft(2, '0')} '
           '${scannedAt.hour.toString().padLeft(2, '0')}:${scannedAt.minute.toString().padLeft(2, '0')}:${scannedAt.second.toString().padLeft(2, '0')}';
@@ -296,6 +321,56 @@ class _AttendancePageState extends State<AttendancePage> {
     }
 
     return grouped;
+  }
+
+  Future<void> updateTeacherAttendanceStatus({
+    required QueryDocumentSnapshot<Map<String, dynamic>> targetDoc,
+    required String status,
+  }) async {
+    try {
+      final normalized = status.toLowerCase();
+
+      double present = 0;
+      double late = 0;
+      double absent = 0;
+      double attendanceScore = 0;
+
+      if (normalized == 'present') {
+        present = 1;
+        late = 0;
+        absent = 0;
+        attendanceScore = 1;
+      } else if (normalized == 'late') {
+        present = 0;
+        late = 1;
+        absent = 0;
+        attendanceScore = 0.5;
+      } else if (normalized == 'absent') {
+        present = 0;
+        late = 0;
+        absent = 1;
+        attendanceScore = 0;
+      }
+
+      await FirebaseFirestore.instance
+          .collection('attendance')
+          .doc(targetDoc.id)
+          .update({
+        'teacher_attendance_status': normalized,
+        'teacher_attendance_updated_at': FieldValue.serverTimestamp(),
+        'present': present,
+        'late': late,
+        'absent': absent,
+        'attendance_score': attendanceScore,
+      });
+
+      if (!mounted) return;
+      _snack('Attendance updated to ${status.toUpperCase()}',
+          isSuccess: true);
+    } catch (e) {
+      if (!mounted) return;
+      _snack('Failed to update attendance: $e');
+    }
   }
 
   Future<void> exportToExcel(
@@ -309,32 +384,43 @@ class _AttendancePageState extends State<AttendancePage> {
       final sheet = excel[defaultSheetName];
 
       sheet.appendRow([
+        ex.TextCellValue('Student Name'),
         ex.TextCellValue('Email'),
+        ex.TextCellValue('Section'),
         ex.TextCellValue('Present'),
         ex.TextCellValue('Late'),
         ex.TextCellValue('Absent'),
         ex.TextCellValue('Attendance Score'),
+        ex.TextCellValue('Teacher Override'),
         ex.TextCellValue('Date Attended'),
         ex.TextCellValue('Room'),
-        ex.TextCellValue('Section'),
+        ex.TextCellValue('Class Section'),
         ex.TextCellValue('Subject'),
         ex.TextCellValue('Time Slot'),
       ]);
 
       for (final entry in grouped.entries) {
         final email = entry.key;
+        final studentName = (entry.value['student_name'] ?? '').toString();
+        final studentSection =
+        (entry.value['student_section'] ?? '').toString();
         final present = entry.value['present'] as double;
         final late = entry.value['late'] as double;
         final absent = entry.value['absent'] as double;
         final score = entry.value['score'] as double;
         final dates = (entry.value['dates'] as List<String>).join(', ');
+        final overrideStatus =
+        (entry.value['teacher_attendance_status'] ?? '').toString();
 
         sheet.appendRow([
+          ex.TextCellValue(studentName),
           ex.TextCellValue(email),
+          ex.TextCellValue(studentSection),
           ex.TextCellValue(present.toString()),
           ex.TextCellValue(late.toString()),
           ex.TextCellValue(absent.toString()),
           ex.TextCellValue(score.toString()),
+          ex.TextCellValue(overrideStatus),
           ex.TextCellValue(dates),
           ex.TextCellValue(selectedRoom),
           ex.TextCellValue(currentSection),
@@ -356,7 +442,8 @@ class _AttendancePageState extends State<AttendancePage> {
           href:
           'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,$base64Data',
         )
-          ..download = 'attendance.xlsx'
+          ..download =
+              'attendance_${selectedRoom}_${currentSection}_${currentSubject}.xlsx'
           ..click();
       } else {
         throw Exception('This export code is currently set up for web only.');
@@ -409,7 +496,7 @@ class _AttendancePageState extends State<AttendancePage> {
       builder: (_) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         child: SizedBox(
-          width: 420,
+          width: 460,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -457,8 +544,10 @@ class _AttendancePageState extends State<AttendancePage> {
                     : ListView.separated(
                   shrinkWrap: true,
                   itemCount: userDocs.length,
-                  separatorBuilder: (_, __) =>
-                  const Divider(height: 1, color: Color(0xFFF3F4F6)),
+                  separatorBuilder: (_, __) => const Divider(
+                    height: 1,
+                    color: Color(0xFFF3F4F6),
+                  ),
                   itemBuilder: (_, index) {
                     final data = userDocs[index].data();
                     final timestamp = data['timestamp'];
@@ -466,12 +555,19 @@ class _AttendancePageState extends State<AttendancePage> {
 
                     if (timestamp is Timestamp) {
                       final dt = timestamp.toDate();
-                      final h =
-                      dt.hour == 0 ? 12 : dt.hour > 12 ? dt.hour - 12 : dt.hour;
+                      final h = dt.hour == 0
+                          ? 12
+                          : dt.hour > 12
+                          ? dt.hour - 12
+                          : dt.hour;
                       final m = dt.minute.toString().padLeft(2, '0');
                       final p = dt.hour >= 12 ? 'PM' : 'AM';
                       scanText = '$h:$m $p';
                     }
+
+                    final teacherStatus =
+                    (data['teacher_attendance_status'] ?? '')
+                        .toString();
 
                     return Padding(
                       padding: const EdgeInsets.symmetric(
@@ -512,6 +608,15 @@ class _AttendancePageState extends State<AttendancePage> {
                                   style: const TextStyle(
                                     fontSize: 11,
                                     color: Colors.black45,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Teacher status: ${teacherStatus.isEmpty ? 'Auto' : teacherStatus}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: _nuDarkBlue,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ],
@@ -600,12 +705,12 @@ class _AttendancePageState extends State<AttendancePage> {
             ),
           ),
           const SizedBox(height: 8),
-          Row(
+          Wrap(
+            spacing: 24,
+            runSpacing: 8,
             children: [
               _classMeta(Icons.access_time, currentTimeSlot),
-              const SizedBox(width: 24),
               _classMeta(Icons.group_outlined, currentSection),
-              const SizedBox(width: 24),
               _classMeta(
                 Icons.meeting_room_outlined,
                 'Room $selectedRoom',
@@ -616,8 +721,8 @@ class _AttendancePageState extends State<AttendancePage> {
       )
           : Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
+        children: const [
+          Text(
             'Auto Room Detection',
             style: TextStyle(
               color: Colors.white70,
@@ -625,8 +730,8 @@ class _AttendancePageState extends State<AttendancePage> {
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 8),
-          const Text(
+          SizedBox(height: 8),
+          Text(
             'No class ongoing right now.',
             style: TextStyle(color: Colors.white38, fontSize: 13),
           ),
@@ -637,6 +742,7 @@ class _AttendancePageState extends State<AttendancePage> {
 
   Widget _classMeta(IconData icon, String text) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 14, color: _nuGold.withOpacity(0.7)),
         const SizedBox(width: 8),
@@ -754,17 +860,10 @@ class _AttendancePageState extends State<AttendancePage> {
                   ),
                   const Spacer(),
                   Row(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF22C55E),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      const Text(
+                    children: const [
+                      _LiveIndicator(),
+                      SizedBox(width: 8),
+                      Text(
                         'Live Sync Active',
                         style: TextStyle(
                           fontSize: 12,
@@ -785,14 +884,14 @@ class _AttendancePageState extends State<AttendancePage> {
                   ? Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  children: [
+                  children: const [
                     Icon(
                       Icons.event_busy_outlined,
                       size: 52,
                       color: Colors.black12,
                     ),
-                    const SizedBox(height: 12),
-                    const Text(
+                    SizedBox(height: 12),
+                    Text(
                       'No active class attendance to display.',
                       style: TextStyle(
                         fontSize: 15,
@@ -810,7 +909,51 @@ class _AttendancePageState extends State<AttendancePage> {
                     .orderBy('timestamp', descending: true)
                     .snapshots(),
                 builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.red.withOpacity(0.15),
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              color: Colors.red,
+                              size: 40,
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Attendance stream error',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.red,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '${snapshot.error}',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.black54,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  if (snapshot.connectionState == ConnectionState.waiting &&
+                      !snapshot.hasData) {
                     return const Center(
                       child: CircularProgressIndicator(
                         color: _nuDarkBlue,
@@ -818,8 +961,9 @@ class _AttendancePageState extends State<AttendancePage> {
                     );
                   }
 
-                  final docs = snapshot.data!.docs;
-                  final grouped = groupAttendanceByEmailFromCurrentClass(docs);
+                  final docs = snapshot.data?.docs ?? [];
+                  final grouped =
+                  groupAttendanceByEmailFromCurrentClass(docs);
                   final emails = grouped.keys.toList();
 
                   return Column(
@@ -877,14 +1021,14 @@ class _AttendancePageState extends State<AttendancePage> {
                             ? Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
-                            children: [
+                            children: const [
                               Icon(
                                 Icons.people_outline,
                                 size: 48,
                                 color: Colors.black12,
                               ),
-                              const SizedBox(height: 12),
-                              const Text(
+                              SizedBox(height: 12),
+                              Text(
                                 'No students have scanned for this class yet.',
                                 style: TextStyle(
                                   fontSize: 14,
@@ -911,7 +1055,8 @@ class _AttendancePageState extends State<AttendancePage> {
                                 ),
                                 decoration: const BoxDecoration(
                                   color: Color(0xFFF9FAFB),
-                                  borderRadius: BorderRadius.vertical(
+                                  borderRadius:
+                                  BorderRadius.vertical(
                                     top: Radius.circular(12),
                                   ),
                                   border: Border(
@@ -924,7 +1069,7 @@ class _AttendancePageState extends State<AttendancePage> {
                                   children: [
                                     _HeaderCell(
                                       flex: 4,
-                                      text: 'STUDENT EMAIL',
+                                      text: 'STUDENT',
                                     ),
                                     _HeaderCell(
                                       flex: 1,
@@ -939,11 +1084,11 @@ class _AttendancePageState extends State<AttendancePage> {
                                       text: 'ABSENT',
                                     ),
                                     _HeaderCell(
-                                      flex: 2,
+                                      flex: 1,
                                       text: 'SCORE',
                                     ),
                                     _HeaderCell(
-                                      flex: 2,
+                                      flex: 4,
                                       text: 'ACTIONS',
                                     ),
                                   ],
@@ -959,25 +1104,57 @@ class _AttendancePageState extends State<AttendancePage> {
                                   ),
                                   itemBuilder: (context, index) {
                                     final email = emails[index];
+                                    final data = grouped[email]!;
                                     final present =
-                                    grouped[email]!['present']
-                                    as double;
+                                    data['present'] as double;
                                     final late =
-                                    grouped[email]!['late']
-                                    as double;
+                                    data['late'] as double;
                                     final absent =
-                                    grouped[email]!['absent']
-                                    as double;
+                                    data['absent'] as double;
                                     final score =
-                                    grouped[email]!['score']
-                                    as double;
+                                    data['score'] as double;
+                                    final studentName =
+                                    (data['student_name'] ?? '')
+                                        .toString();
+                                    final studentSection =
+                                    (data['student_section'] ??
+                                        '')
+                                        .toString();
+                                    final latestDoc =
+                                    data['latest_doc']
+                                    as QueryDocumentSnapshot<
+                                        Map<String, dynamic>>;
+                                    final teacherStatus =
+                                    (data['teacher_attendance_status'] ??
+                                        '')
+                                        .toString();
 
                                     return _AttendanceRow(
                                       email: email,
+                                      studentName: studentName,
+                                      studentSection:
+                                      studentSection,
                                       present: present,
                                       late: late,
                                       absent: absent,
                                       score: score,
+                                      teacherStatus:
+                                      teacherStatus,
+                                      onSetPresent: () =>
+                                          updateTeacherAttendanceStatus(
+                                            targetDoc: latestDoc,
+                                            status: 'present',
+                                          ),
+                                      onSetLate: () =>
+                                          updateTeacherAttendanceStatus(
+                                            targetDoc: latestDoc,
+                                            status: 'late',
+                                          ),
+                                      onSetAbsent: () =>
+                                          updateTeacherAttendanceStatus(
+                                            targetDoc: latestDoc,
+                                            status: 'absent',
+                                          ),
                                       onDetails: () =>
                                           showAttendanceDetails(
                                             context,
@@ -1000,7 +1177,8 @@ class _AttendancePageState extends State<AttendancePage> {
                                       color: Color(0xFFE5E7EB),
                                     ),
                                   ),
-                                  borderRadius: BorderRadius.vertical(
+                                  borderRadius:
+                                  BorderRadius.vertical(
                                     bottom: Radius.circular(12),
                                   ),
                                 ),
@@ -1029,20 +1207,48 @@ class _AttendancePageState extends State<AttendancePage> {
   }
 }
 
+class _LiveIndicator extends StatelessWidget {
+  const _LiveIndicator();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: const BoxDecoration(
+        color: Color(0xFF22C55E),
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+}
+
 class _AttendanceRow extends StatefulWidget {
   final String email;
+  final String studentName;
+  final String studentSection;
   final double present;
   final double late;
   final double absent;
   final double score;
+  final String teacherStatus;
+  final VoidCallback onSetPresent;
+  final VoidCallback onSetLate;
+  final VoidCallback onSetAbsent;
   final VoidCallback onDetails;
 
   const _AttendanceRow({
     required this.email,
+    required this.studentName,
+    required this.studentSection,
     required this.present,
     required this.late,
     required this.absent,
     required this.score,
+    required this.teacherStatus,
+    required this.onSetPresent,
+    required this.onSetLate,
+    required this.onSetAbsent,
     required this.onDetails,
   });
 
@@ -1081,8 +1287,8 @@ class _AttendanceRowState extends State<_AttendanceRow> {
               child: Row(
                 children: [
                   Container(
-                    width: 30,
-                    height: 30,
+                    width: 34,
+                    height: 34,
                     decoration: BoxDecoration(
                       color: const Color(0xFFE8EEF8),
                       borderRadius: BorderRadius.circular(6),
@@ -1102,13 +1308,63 @@ class _AttendanceRowState extends State<_AttendanceRow> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(
-                      widget.email,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF374151),
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.studentName.isNotEmpty
+                              ? widget.studentName
+                              : 'No name',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1F2937),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.email,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF6B7280),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (widget.studentSection.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            'Section: ${widget.studentSection}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: _nuDarkBlue,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                        if (widget.teacherStatus.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE8EEF8),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              'Override: ${widget.teacherStatus.toUpperCase()}',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: _nuDarkBlue,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ],
@@ -1148,7 +1404,7 @@ class _AttendanceRowState extends State<_AttendanceRow> {
               ),
             ),
             Expanded(
-              flex: 2,
+              flex: 1,
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Container(
@@ -1172,13 +1428,84 @@ class _AttendanceRowState extends State<_AttendanceRow> {
               ),
             ),
             Expanded(
-              flex: 2,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: _DetailsBtn(onTap: widget.onDetails),
+              flex: 4,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _StatusBtn(
+                    label: 'Present',
+                    color: const Color(0xFF166534),
+                    bg: const Color(0xFFDCFCE7),
+                    onTap: widget.onSetPresent,
+                  ),
+                  _StatusBtn(
+                    label: 'Late',
+                    color: const Color(0xFF92400E),
+                    bg: const Color(0xFFFEF3C7),
+                    onTap: widget.onSetLate,
+                  ),
+                  _StatusBtn(
+                    label: 'Absent',
+                    color: const Color(0xFF991B1B),
+                    bg: const Color(0xFFFEE2E2),
+                    onTap: widget.onSetAbsent,
+                  ),
+                  _DetailsBtn(onTap: widget.onDetails),
+                ],
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusBtn extends StatefulWidget {
+  final String label;
+  final Color color;
+  final Color bg;
+  final VoidCallback onTap;
+
+  const _StatusBtn({
+    required this.label,
+    required this.color,
+    required this.bg,
+    required this.onTap,
+  });
+
+  @override
+  State<_StatusBtn> createState() => _StatusBtnState();
+}
+
+class _StatusBtnState extends State<_StatusBtn> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: _hovered ? widget.color : widget.bg,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: widget.color.withOpacity(0.2)),
+          ),
+          child: Text(
+            widget.label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: _hovered ? Colors.white : widget.color,
+            ),
+          ),
         ),
       ),
     );
