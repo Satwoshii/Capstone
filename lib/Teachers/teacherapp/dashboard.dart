@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -23,19 +24,14 @@ class TeacherDashboard extends StatefulWidget {
 class _TeacherDashboardState extends State<TeacherDashboard> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // ── FIXED LOGOUT ────────────────────────────────────────────────────────────
   Future<void> _signOut(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
-
-    // remove saved teacher login token
     await prefs.remove("teacher_token");
 
     if (!mounted) return;
 
-    // close drawer if open
     Navigator.of(context).popUntil((route) => route.isFirst);
 
-    // go to login and remove old pages from stack
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => const TeacherLoginScreen()),
@@ -49,7 +45,6 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
       key: _scaffoldKey,
       backgroundColor: const Color(0xFFF4F5F8),
       drawer: _TeacherDrawer(onLogout: () => _signOut(context)),
-
       body: SafeArea(
         child: Column(
           children: [
@@ -65,8 +60,7 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                         IconButton(
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
-                          icon: const Icon(Icons.menu,
-                              color: _nuGold, size: 26),
+                          icon: const Icon(Icons.menu, color: _nuGold, size: 26),
                           onPressed: () =>
                               _scaffoldKey.currentState?.openDrawer(),
                         ),
@@ -119,7 +113,6 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                 ],
               ),
             ),
-
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(28),
@@ -128,39 +121,7 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                   children: [
                     _WelcomeBanner(),
                     const SizedBox(height: 24),
-                    _StatsGrid(),
-                    const SizedBox(height: 20),
-
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEAF3DE),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFF97C459)),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.check_circle_outline,
-                              color: Color(0xFF3B6D11), size: 20),
-                          SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'No active class conflicts right now.',
-                              style: TextStyle(
-                                color: Color(0xFF27500A),
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    _ActionsGrid(context: context),
+                    _ActionsGrid(),
                   ],
                 ),
               ),
@@ -280,136 +241,8 @@ class _WelcomeBannerState extends State<_WelcomeBanner>
   }
 }
 
-// ── Stats Grid ────────────────────────────────────────────────────────────────
-class _StatsGrid extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _StatCard(
-            label: "Today's Classes",
-            value: '3',
-            icon: Icons.calendar_today_outlined,
-            accentColor: const Color(0xFF185FA5),
-            iconBg: const Color(0xFFE6F1FB),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _StatCard(
-            label: 'Lab Rooms',
-            value: '6',
-            icon: Icons.meeting_room_outlined,
-            accentColor: _nuDarkBlue,
-            iconBg: const Color(0xFFE8EEF8),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _StatCard(
-            label: 'Attendance',
-            value: '40',
-            icon: Icons.people_outline,
-            accentColor: const Color(0xFF3B6D11),
-            iconBg: const Color(0xFFEAF3DE),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _StatCard(
-            label: 'Schedules',
-            value: '0',
-            icon: Icons.event_note_outlined,
-            accentColor: const Color(0xFF854F0B),
-            iconBg: const Color(0xFFFAEEDA),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final String label, value;
-  final IconData icon;
-  final Color accentColor, iconBg;
-
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.accentColor,
-    required this.iconBg,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.black.withOpacity(0.07)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: double.infinity,
-            height: 3,
-            decoration: BoxDecoration(
-              color: accentColor,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: iconBg,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, size: 20, color: accentColor),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.black54,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.w800,
-              color: accentColor,
-              height: 1,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 // ── Actions Grid ──────────────────────────────────────────────────────────────
 class _ActionsGrid extends StatelessWidget {
-  final BuildContext context;
-  const _ActionsGrid({required this.context});
-
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -643,10 +476,8 @@ class _TeacherDrawer extends StatelessWidget {
               ],
             ),
           ),
-
           Container(height: 3, color: _nuGold),
           const SizedBox(height: 10),
-
           _DrawerItem(
             icon: Icons.calendar_month_outlined,
             label: 'Schedule',
@@ -693,10 +524,8 @@ class _TeacherDrawer extends StatelessWidget {
               );
             },
           ),
-
           const Spacer(),
           const Divider(height: 1),
-
           _DrawerItem(
             icon: Icons.logout,
             label: 'Logout',

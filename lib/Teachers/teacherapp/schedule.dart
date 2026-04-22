@@ -1,5 +1,5 @@
+import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart' as ex;
@@ -46,7 +46,11 @@ class _SchedulePageState extends State<SchedulePage>
   late AnimationController _fadeCtrl;
   late Animation<double> _fadeAnim;
 
-  final List<String> rooms = ['706', '707', '708', '709', '710', '723'];
+  final List<String> defaultRooms = ['706', '707', '708', '709', '710', '722'];
+  List<String> rooms = ['706', '707', '708', '709', '710', '722'];
+  bool isLoadingRooms = false;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _roomsSub;
+
   final List<String> days = [
     'Monday',
     'Tuesday',
@@ -118,11 +122,12 @@ class _SchedulePageState extends State<SchedulePage>
       duration: const Duration(milliseconds: 500),
     );
     _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
-    loadScheduleForRoom();
+    _initializeRoomsAndSchedule();
   }
 
   @override
   void dispose() {
+    _roomsSub?.cancel();
     _fadeCtrl.dispose();
     super.dispose();
   }
@@ -137,6 +142,129 @@ class _SchedulePageState extends State<SchedulePage>
     final s = (sectionNumber ?? '').trim();
     if (c.isEmpty || s.isEmpty) return '';
     return '$c$s';
+  }
+
+  String _normalizeRoomValue(String raw) {
+    String value = raw.trim().toUpperCase();
+    if (value.isEmpty) return '';
+
+    if (value.startsWith('ROOM ')) {
+      value = value.substring(5).trim();
+    }
+
+    return value;
+  }
+
+  Future<List<String>> _loadRoomsFromRoomsCollection() async {
+    final snapshot = await FirebaseFirestore.instance.collection('rooms').get();
+    final Set<String> foundRooms = {};
+
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      final candidates = <String>[
+        (data['room'] ?? '').toString(),
+        (data['lab'] ?? '').toString(),
+        (data['room_number'] ?? '').toString(),
+        (data['name'] ?? '').toString(),
+        doc.id,
+      ];
+
+      for (final candidate in candidates) {
+        final normalized = _normalizeRoomValue(candidate);
+        if (normalized.isNotEmpty) {
+          foundRooms.add(normalized);
+          break;
+        }
+      }
+    }
+
+    return foundRooms.toList()..sort();
+  }
+
+  Future<List<String>> _loadRoomsFromPcsCollection() async {
+    final snapshot = await FirebaseFirestore.instance.collection('pcs').get();
+    final Set<String> foundRooms = {};
+
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      final lab = _normalizeRoomValue((data['lab'] ?? '').toString());
+      if (lab.isNotEmpty) {
+        foundRooms.add(lab);
+      }
+    }
+
+    return foundRooms.toList()..sort();
+  }
+
+  Future<void> loadRoomsFromFirestore() async {
+    if (mounted) {
+      setState(() => isLoadingRooms = true);
+    }
+
+    try {
+      final Set<String> mergedRooms = {...defaultRooms};
+
+      final firestoreRooms = await _loadRoomsFromRoomsCollection();
+      mergedRooms.addAll(firestoreRooms);
+
+      if (firestoreRooms.isEmpty) {
+        mergedRooms.addAll(await _loadRoomsFromPcsCollection());
+      }
+
+      final sortedRooms = mergedRooms.toList()..sort();
+
+      if (!mounted) return;
+      setState(() {
+        rooms = sortedRooms;
+        if (rooms.isEmpty) {
+          selectedRoom = '';
+        } else if (!rooms.contains(selectedRoom)) {
+          selectedRoom = defaultRooms.contains('706') && rooms.contains('706')
+              ? '706'
+              : rooms.first;
+        }
+      });
+    } catch (e) {
+      debugPrint('Failed to load schedule rooms: $e');
+      if (!mounted) return;
+      setState(() {
+        rooms = [...defaultRooms];
+        if (!rooms.contains(selectedRoom)) {
+          selectedRoom = rooms.first;
+        }
+      });
+    } finally {
+      if (mounted) {
+        setState(() => isLoadingRooms = false);
+      }
+    }
+  }
+
+  Future<void> _initializeRoomsAndSchedule() async {
+    await loadRoomsFromFirestore();
+    _listenToRoomUpdates();
+    if (selectedRoom.isNotEmpty) {
+      await loadScheduleForRoom();
+    }
+  }
+
+  void _listenToRoomUpdates() {
+    _roomsSub?.cancel();
+
+    _roomsSub = FirebaseFirestore.instance
+        .collection('rooms')
+        .snapshots()
+        .listen((_) async {
+      final previousRoom = selectedRoom;
+      await loadRoomsFromFirestore();
+
+      if (!mounted) return;
+      if (selectedRoom.isNotEmpty && previousRoom != selectedRoom) {
+        await loadScheduleForRoom();
+      }
+    }, onError: (_) async {
+      await loadRoomsFromFirestore();
+    });
   }
 
   Future<void> _signOut(BuildContext context) async {
@@ -220,13 +348,13 @@ class _SchedulePageState extends State<SchedulePage>
     required String endTime,
     String? ignoreDocId,
   }) async {
-    final query = await FirebaseFirestore.instance
+    final roomQuery = await FirebaseFirestore.instance
         .collection('schedules')
         .where('room', isEqualTo: room)
         .where('day', isEqualTo: day)
         .get();
 
-    for (final doc in query.docs) {
+    for (final doc in roomQuery.docs) {
       if (ignoreDocId != null && doc.id == ignoreDocId) continue;
 
       final data = doc.data();
@@ -242,6 +370,41 @@ class _SchedulePageState extends State<SchedulePage>
         endB: existingEnd,
       )) {
         return {
+          'conflict_type': 'room',
+          'docId': doc.id,
+          'teacher_email': (data['teacher_email'] ?? '').toString(),
+          'subject': (data['subject'] ?? '').toString(),
+          'section': (data['section'] ?? '').toString(),
+          'time_slot': (data['time_slot'] ?? '').toString(),
+          'room': (data['room'] ?? '').toString(),
+          'day': (data['day'] ?? '').toString(),
+        };
+      }
+    }
+
+    final teacherQuery = await FirebaseFirestore.instance
+        .collection('schedules')
+        .where('teacher_email', isEqualTo: teacherEmail)
+        .where('day', isEqualTo: day)
+        .get();
+
+    for (final doc in teacherQuery.docs) {
+      if (ignoreDocId != null && doc.id == ignoreDocId) continue;
+
+      final data = doc.data();
+      final existingStart = (data['start_time'] ?? '').toString().trim();
+      final existingEnd = (data['end_time'] ?? '').toString().trim();
+
+      if (existingStart.isEmpty || existingEnd.isEmpty) continue;
+
+      if (rangesConflict(
+        startA: startTime,
+        endA: endTime,
+        startB: existingStart,
+        endB: existingEnd,
+      )) {
+        return {
+          'conflict_type': 'teacher',
           'docId': doc.id,
           'teacher_email': (data['teacher_email'] ?? '').toString(),
           'subject': (data['subject'] ?? '').toString(),
@@ -299,12 +462,14 @@ class _SchedulePageState extends State<SchedulePage>
                       ),
                     ),
                     const SizedBox(width: 14),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Schedule Conflict',
+                            (conflict['conflict_type'] ?? 'room') == 'teacher'
+                                ? 'Teacher Schedule Conflict'
+                                : 'Room Schedule Conflict',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
@@ -312,7 +477,9 @@ class _SchedulePageState extends State<SchedulePage>
                             ),
                           ),
                           Text(
-                            'This time slot is already occupied',
+                            (conflict['conflict_type'] ?? 'room') == 'teacher'
+                                ? 'You already have another class during this time'
+                                : 'This room already has an existing class during this time',
                             style: TextStyle(
                               fontSize: 12,
                               color: Color(0xFF9CA3AF),
@@ -369,9 +536,9 @@ class _SchedulePageState extends State<SchedulePage>
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: const Color(0xFFFDE68A)),
                       ),
-                      child: const Row(
+                      child: Row(
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.info_outline,
                             size: 16,
                             color: Color(0xFFD97706),
@@ -379,7 +546,9 @@ class _SchedulePageState extends State<SchedulePage>
                           SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              'Please verify the room, day, and time before saving.',
+                              (conflict['conflict_type'] ?? 'room') == 'teacher'
+                                  ? 'Please check your day and time. A teacher cannot be assigned to two rooms at the same time.'
+                                  : 'Please check the room number, day, and time. An existing class schedule already uses this room during that time.',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Color(0xFF92400E),
@@ -512,6 +681,314 @@ class _SchedulePageState extends State<SchedulePage>
   List<String> extractCellLines(String raw) =>
       raw.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
 
+
+  String _compactSlotKey(String standardSlot) {
+    final parts = standardSlot.split(' - ');
+    if (parts.length != 2) return standardSlot.trim();
+
+    String compact(String value) {
+      final match = RegExp(
+        r'^(\d{1,2}:\d{2})\s?(AM|PM)$',
+        caseSensitive: false,
+      ).firstMatch(value.trim());
+
+      if (match == null) return value.trim();
+      return match.group(1)!.trim();
+    }
+
+    return '${compact(parts.first)}-${compact(parts.last)}';
+  }
+
+  String? normalizeTimeSlotLabel(String raw) {
+    final normalized = raw
+        .trim()
+        .replaceAll('–', '-')
+        .replaceAll('—', '-')
+        .replaceAll(RegExp(r'\s+'), '');
+
+    if (normalized.isEmpty) return null;
+
+    for (final slot in timeSlots) {
+      if (_compactSlotKey(slot).toLowerCase() == normalized.toLowerCase()) {
+        return slot;
+      }
+    }
+
+    return null;
+  }
+
+  bool isSectionText(String value) {
+    final normalized = value.trim().toUpperCase().replaceAll(' ', '');
+    return RegExp(r'^[A-Z]{2,6}-?\d{3,4}$').hasMatch(normalized);
+  }
+
+  String normalizeSectionText(String value) {
+    return value.trim().toUpperCase().replaceAll(RegExp(r'\s+'), '');
+  }
+
+  bool isIgnoredScheduleCell(String value) {
+    final normalized = value.trim().toUpperCase();
+    return normalized.isEmpty ||
+        normalized == 'LUNCH BREAK' ||
+        normalized == 'BREAK' ||
+        normalized == 'VACANT';
+  }
+
+  int? findHeaderRow(ex.Sheet sheet) {
+    for (int row = 0; row < 200; row++) {
+      final firstCell = cellText(
+        sheet
+            .cell(ex.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+            .value,
+      ).toUpperCase();
+
+      if (firstCell == 'TIME') {
+        return row;
+      }
+    }
+    return null;
+  }
+
+  List<Map<String, dynamic>> parseStandardTemplateSheet(
+      ex.Sheet sheet,
+      String fileName,
+      ) {
+    final List<Map<String, dynamic>> parsedEntries = [];
+
+    for (int row = 1; row <= timeSlots.length; row++) {
+      final rowTime = cellText(
+        sheet
+            .cell(ex.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+            .value,
+      );
+
+      if (rowTime.isEmpty) continue;
+
+      for (int col = 1; col <= days.length; col++) {
+        final day = days[col - 1];
+        final rawCell = cellText(
+          sheet
+              .cell(
+            ex.CellIndex.indexByColumnRow(
+              columnIndex: col,
+              rowIndex: row,
+            ),
+          )
+              .value,
+        );
+
+        if (rawCell.isEmpty) continue;
+
+        final lines = extractCellLines(rawCell);
+
+        String subject = '';
+        String section = '';
+        String fullTime = '';
+
+        if (lines.isNotEmpty) subject = lines[0];
+        if (lines.length > 1) section = normalizeSectionText(lines[1]);
+        if (lines.length > 2) fullTime = lines[2];
+
+        if (subject.isEmpty) continue;
+
+        String startTime;
+        String endTime;
+
+        if (fullTime.isNotEmpty && fullTime.contains(' - ')) {
+          final parts = fullTime.split(' - ');
+          startTime = parts.first.trim();
+          endTime = parts.last.trim();
+        } else {
+          final normalizedSlot = normalizeTimeSlotLabel(rowTime) ?? rowTime;
+          final parts = normalizedSlot.split(' - ');
+          if (parts.length != 2) continue;
+          startTime = parts.first.trim();
+          endTime = parts.last.trim();
+          fullTime = normalizedSlot;
+        }
+
+        parsedEntries.add({
+          'room': selectedRoom,
+          'day': day,
+          'start_time': startTime,
+          'end_time': endTime,
+          'time_slot': '$startTime - $endTime',
+          'subject': subject,
+          'section': section,
+          'teacher_email': teacherEmail,
+          'source_file': fileName,
+          'created_at': FieldValue.serverTimestamp(),
+        });
+      }
+    }
+
+    return parsedEntries;
+  }
+
+  List<Map<String, dynamic>> parseFacultyScheduleSheet(
+      ex.Sheet sheet,
+      String fileName,
+      ) {
+    final List<Map<String, dynamic>> parsedEntries = [];
+    final headerRow = findHeaderRow(sheet);
+
+    if (headerRow == null) return parsedEntries;
+
+    final Map<int, String> dayColumns = {};
+    for (int col = 1; col <= 10; col++) {
+      final headerText = cellText(
+        sheet
+            .cell(
+          ex.CellIndex.indexByColumnRow(
+            columnIndex: col,
+            rowIndex: headerRow,
+          ),
+        )
+            .value,
+      ).toUpperCase();
+
+      for (final day in days) {
+        if (headerText == day.toUpperCase()) {
+          dayColumns[col] = day;
+          break;
+        }
+      }
+    }
+
+    if (dayColumns.isEmpty) return parsedEntries;
+
+    for (final entry in dayColumns.entries) {
+      final col = entry.key;
+      final day = entry.value;
+
+      int row = headerRow + 1;
+
+      while (row < 200) {
+        final timeText = cellText(
+          sheet
+              .cell(
+            ex.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
+          )
+              .value,
+        );
+        final cellValue = cellText(
+          sheet
+              .cell(
+            ex.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row),
+          )
+              .value,
+        );
+
+        final normalizedSlot = normalizeTimeSlotLabel(timeText);
+
+        if (normalizedSlot == null) {
+          row++;
+          continue;
+        }
+
+        if (isIgnoredScheduleCell(cellValue) || isSectionText(cellValue)) {
+          row++;
+          continue;
+        }
+
+        String subject = cellValue;
+        String section = '';
+        int endRow = row;
+
+        int nextRow = row + 1;
+        while (nextRow < 200) {
+          final nextTimeText = cellText(
+            sheet
+                .cell(
+              ex.CellIndex.indexByColumnRow(
+                columnIndex: 0,
+                rowIndex: nextRow,
+              ),
+            )
+                .value,
+          );
+          final nextSlot = normalizeTimeSlotLabel(nextTimeText);
+          if (nextSlot == null) break;
+
+          final nextValue = cellText(
+            sheet
+                .cell(
+              ex.CellIndex.indexByColumnRow(
+                columnIndex: col,
+                rowIndex: nextRow,
+              ),
+            )
+                .value,
+          );
+
+          if (isSectionText(nextValue) && section.isEmpty) {
+            section = normalizeSectionText(nextValue);
+            endRow = nextRow;
+            nextRow++;
+            continue;
+          }
+
+          if (nextValue.trim().toUpperCase() == subject.trim().toUpperCase()) {
+            endRow = nextRow;
+            nextRow++;
+            continue;
+          }
+
+          break;
+        }
+
+        final startSlot = normalizeTimeSlotLabel(
+          cellText(
+            sheet
+                .cell(
+              ex.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
+            )
+                .value,
+          ),
+        );
+        final endSlot = normalizeTimeSlotLabel(
+          cellText(
+            sheet
+                .cell(
+              ex.CellIndex.indexByColumnRow(
+                columnIndex: 0,
+                rowIndex: endRow,
+              ),
+            )
+                .value,
+          ),
+        );
+
+        if (startSlot != null && endSlot != null) {
+          final startParts = startSlot.split(' - ');
+          final endParts = endSlot.split(' - ');
+
+          if (startParts.length == 2 && endParts.length == 2) {
+            final startTime = startParts.first.trim();
+            final endTime = endParts.last.trim();
+
+            parsedEntries.add({
+              'room': selectedRoom,
+              'day': day,
+              'start_time': startTime,
+              'end_time': endTime,
+              'time_slot': '$startTime - $endTime',
+              'subject': subject,
+              'section': section,
+              'teacher_email': teacherEmail,
+              'source_file': fileName,
+              'created_at': FieldValue.serverTimestamp(),
+            });
+          }
+        }
+
+        row = endRow + 1;
+      }
+    }
+
+    return parsedEntries;
+  }
+
   Future<void> exportScheduleTemplate() async {
     try {
       final excel = ex.Excel.createExcel();
@@ -523,31 +1000,13 @@ class _SchedulePageState extends State<SchedulePage>
         ...days.map((d) => ex.TextCellValue(d)),
       ]);
 
+      // Export should always be a blank template.
+      // It must not include the currently loaded classes from scheduleMap.
       for (final slot in timeSlots) {
-        final row = <ex.CellValue>[ex.TextCellValue(slot)];
-
-        for (final day in days) {
-          final entry = scheduleMap[makeKey(day, slot)];
-          final subject = entry?['subject'] ?? '';
-          final section = entry?['section'] ?? '';
-          final classTime = entry?['class_time'] ?? '';
-
-          if (subject.isEmpty && section.isEmpty && classTime.isEmpty) {
-            row.add(ex.TextCellValue(''));
-          } else {
-            row.add(
-              ex.TextCellValue(
-                [
-                  if (subject.isNotEmpty) subject,
-                  if (section.isNotEmpty) section,
-                  if (classTime.isNotEmpty) classTime,
-                ].join('\n'),
-              ),
-            );
-          }
-        }
-
-        sheet.appendRow(row);
+        sheet.appendRow([
+          ex.TextCellValue(slot),
+          ...List.generate(days.length, (_) => ex.TextCellValue('')),
+        ]);
       }
 
       final bytes = excel.encode();
@@ -559,14 +1018,14 @@ class _SchedulePageState extends State<SchedulePage>
           href:
           'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,$base64Data',
         )
-          ..download = 'schedule_room_$selectedRoom.xlsx'
+          ..download = 'schedule_template_room_$selectedRoom.xlsx'
           ..click();
       } else {
         throw Exception('Excel export is currently set up for web only.');
       }
 
       if (!mounted) return;
-      _showSuccessSnackBar('Schedule exported successfully');
+      _showSuccessSnackBar('Blank schedule template exported successfully');
     } catch (e) {
       if (!mounted) return;
       _showErrorSnackBar('Export failed: $e');
@@ -603,71 +1062,11 @@ class _SchedulePageState extends State<SchedulePage>
         throw Exception('No sheet found in the Excel file.');
       }
 
-      final List<Map<String, dynamic>> parsedEntries = [];
+      final parsedEntries = <Map<String, dynamic>>[];
+      parsedEntries.addAll(parseStandardTemplateSheet(sheet, file.name));
 
-      for (int row = 1; row <= timeSlots.length; row++) {
-        final rowTime = cellText(
-          sheet
-              .cell(ex.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
-              .value,
-        );
-
-        if (rowTime.isEmpty) continue;
-
-        for (int col = 1; col <= days.length; col++) {
-          final day = days[col - 1];
-          final rawCell = cellText(
-            sheet
-                .cell(
-              ex.CellIndex.indexByColumnRow(
-                columnIndex: col,
-                rowIndex: row,
-              ),
-            )
-                .value,
-          );
-
-          if (rawCell.isEmpty) continue;
-
-          final lines = extractCellLines(rawCell);
-
-          String subject = '';
-          String section = '';
-          String fullTime = '';
-
-          if (lines.isNotEmpty) subject = lines[0];
-          if (lines.length > 1) section = lines[1];
-          if (lines.length > 2) fullTime = lines[2];
-
-          if (subject.isEmpty) continue;
-
-          String startTime;
-          String endTime;
-
-          if (fullTime.isNotEmpty && fullTime.contains(' - ')) {
-            final parts = fullTime.split(' - ');
-            startTime = parts.first.trim();
-            endTime = parts.last.trim();
-          } else {
-            final parts = rowTime.split(' - ');
-            startTime = parts.first.trim();
-            endTime = parts.last.trim();
-            fullTime = rowTime;
-          }
-
-          parsedEntries.add({
-            'room': selectedRoom,
-            'day': day,
-            'start_time': startTime,
-            'end_time': endTime,
-            'time_slot': '$startTime - $endTime',
-            'subject': subject,
-            'section': section,
-            'teacher_email': teacherEmail,
-            'source_file': file.name,
-            'created_at': FieldValue.serverTimestamp(),
-          });
-        }
+      if (parsedEntries.isEmpty) {
+        parsedEntries.addAll(parseFacultyScheduleSheet(sheet, file.name));
       }
 
       final unique = <String, Map<String, dynamic>>{};
@@ -1600,11 +1999,20 @@ class _SchedulePageState extends State<SchedulePage>
                           ),
                         ),
                         const SizedBox(width: 12),
-                        _RoomDropdown(
+                        isLoadingRooms
+                            ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: _nuBlue,
+                          ),
+                        )
+                            : _RoomDropdown(
                           rooms: rooms,
                           selectedRoom: selectedRoom,
                           onChanged: (v) async {
-                            if (v == null) return;
+                            if (v == null || v == selectedRoom) return;
                             setState(() => selectedRoom = v);
                             await loadScheduleForRoom();
                           },
@@ -1871,7 +2279,15 @@ class _RoomDropdown extends StatelessWidget {
         border: Border.all(color: _nuBlue.withOpacity(0.2)),
       ),
       child: DropdownButton<String>(
-        value: selectedRoom,
+        value: rooms.contains(selectedRoom) ? selectedRoom : null,
+        hint: const Text(
+          'No rooms',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: _nuDarkBlue,
+            fontSize: 13,
+          ),
+        ),
         underline: const SizedBox(),
         isDense: true,
         style: const TextStyle(
@@ -1894,7 +2310,7 @@ class _RoomDropdown extends StatelessWidget {
           ),
         )
             .toList(),
-        onChanged: onChanged,
+        onChanged: rooms.isEmpty ? null : onChanged,
       ),
     );
   }
